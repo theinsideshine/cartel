@@ -32,7 +32,7 @@ MisDistancias punto = {
 };
 
 // WS2812B -> Pin de Control.
-#define DATA_PIN 10
+#define DATA_PIN 8
 // Array de Leds.
 CRGB leds[NUM_LEDS];
 
