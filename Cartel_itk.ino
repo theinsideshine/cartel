@@ -45,7 +45,7 @@ VL53L0X sensor;
 // - higher accuracy at the cost of lower speed
 
 //#define HIGH_SPEED
-//#define HIGH_ACCURACY
+#define HIGH_ACCURACY
 
 void setup() {
   pinMode(pulsador, INPUT_PULLUP); 
@@ -309,5 +309,3 @@ void led_off()
 }
 
 //----------------------------------------------------------------------------------
-
-
