@@ -25,7 +25,8 @@ int BUZZER = 6;
 bool autoaprendizaje = false;
 bool semaforo = false;
 
-float DISTANCIA = 0;   
+float DISTANCIA = 0;  
+float lastDISTANCIA = 0;   
 float lastmm = 0;
 MisDistancias punto = {
  0,0,0,0,0
@@ -150,65 +151,87 @@ void meter(){
   {
     DISTANCIA = (sensor.readRangeSingleMillimeters()); 
     if (sensor.timeoutOccurred()) { Serial.print(" TIMEOUT"); }
-    Serial.print("Midiendo Distancia Maxima: " ); 
-    Serial.print(DISTANCIA);
-    Serial.println(" mm.");     
+    if ((DISTANCIA == 0) || (DISTANCIA > 3000))
+    {
+      DISTANCIA = lastDISTANCIA;
+    }
+    else
+    {
+      lastDISTANCIA = DISTANCIA;
+      Serial.print("Midiendo Distancia Maxima: " ); 
+      Serial.print(DISTANCIA);
+      Serial.println(" mm.");     
+    }
   }
-  delay(200);
+  delay(100);
 }
 
 void control(){
   float mm = 0;
   mm = (sensor.readRangeSingleMillimeters());
   if (sensor.timeoutOccurred()) { Serial.print(" TIMEOUT"); }
-  if (mm != lastmm)
-  {
-    Serial.print("Distancia Maxima -COVID-: ");    
-    Serial.print(punto.maximo);
-    Serial.println("mm.");
-    Serial.print("Distancia Medida Actual : ");    
-    Serial.print(mm);
-    Serial.println("mm.");
-    lastmm = mm;
-  }
-  
-  if ( mm  < punto.medio) 
-  {
-     digitalWrite(LED_BUILTIN, HIGH);    
-     digitalWrite(BUZZER, LOW);   
-  }
-  else
-  {
-     digitalWrite(LED_BUILTIN, LOW);
-     digitalWrite(BUZZER, HIGH);    
-  }
 
-  if ( mm  > punto.maximo) 
-  {     
-     led_green();
-  }
-  else if ( (mm  < punto.maximo) && (mm  > punto.largo) ) 
-  { 
-     led_yellow();
-  }
-  else if ( (mm  < punto.largo) && (mm  > punto.medio) ) 
-  { 
-    if ( ! semaforo )
+  if( (mm != 0)  && (mm < 3000) )
+  {
+    if (mm != lastmm)
     {
-      led_off();
-      semaforo = true;
+      Serial.print("Distancia Maxima -COVID-: ");    
+      Serial.print(punto.maximo);
+      Serial.println("mm.");
+      Serial.print("Distancia Medida Actual : ");    
+      Serial.print(mm);
+      Serial.println("mm.");
+      lastmm = mm;
+    }
+    
+    if ( mm  < punto.medio) 
+    {
+       digitalWrite(LED_BUILTIN, HIGH);    
+       digitalWrite(BUZZER, LOW);   
     }
     else
     {
-      led_yellow();
-      semaforo = false;
+       digitalWrite(LED_BUILTIN, LOW);
+       digitalWrite(BUZZER, HIGH);    
+    }
+  
+    if ( mm  > punto.maximo) 
+    {     
+       led_green();
+    }
+    else if ( (mm  < punto.maximo) && (mm  > punto.largo) ) 
+    { 
+       led_yellow();
+    }
+    else if ( (mm  < punto.largo) && (mm  > punto.medio) ) 
+    { 
+      if ( ! semaforo )
+      {
+        led_off();
+        semaforo = true;
+      }
+      else
+      {
+        led_yellow();
+        semaforo = false;
+      }
+    }
+    else if (mm  < punto.medio)
+    { 
+       led_red();
+    } 
+    else
+    {
+      digitalWrite(BUZZER, HIGH); 
+      delay(1);
     }
   }
-  else
-  { 
-     led_red();
-  } 
-  delay(10);
+   else
+  {
+      // Apaga el buzzer cuando detecta error!!.
+      digitalWrite(BUZZER, HIGH); 
+  }
+  //delay(10);
 }
 
 
