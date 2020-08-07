@@ -151,17 +151,9 @@ void meter(){
   {
     DISTANCIA = (sensor.readRangeSingleMillimeters()); 
     if (sensor.timeoutOccurred()) { Serial.print(" TIMEOUT"); }
-    if ((DISTANCIA == 0) || (DISTANCIA > 3000))
-    {
-      DISTANCIA = lastDISTANCIA;
-    }
-    else
-    {
-      lastDISTANCIA = DISTANCIA;
-      Serial.print("Midiendo Distancia Maxima: " ); 
-      Serial.print(DISTANCIA);
-      Serial.println(" mm.");     
-    }
+    Serial.print("Midiendo Distancia Maxima: " ); 
+    Serial.print(DISTANCIA);
+    Serial.println(" mm.");        
   }
   delay(100);
 }
@@ -171,7 +163,7 @@ void control(){
   mm = (sensor.readRangeSingleMillimeters());
   if (sensor.timeoutOccurred()) { Serial.print(" TIMEOUT"); }
 
-  if( (mm != 0)  && (mm < 3000) )
+  if( (mm != 0)  /*&& (mm < 3000)*/ )
   {
     if (mm != lastmm)
     {
@@ -330,5 +322,4 @@ void led_off()
   }
   FastLED.show();
 }
-
 //----------------------------------------------------------------------------------
