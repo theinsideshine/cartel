@@ -10,17 +10,18 @@
 #include <FastLED.h>
 #include <EEPROM.h>
 
-#define NUM_LEDS 8
+#define NUM_LEDS 16
+#define DISTANCIA_MAXIMA 2000
+#define COUNTER_VACIO 5
 
 struct MisDistancias {
   byte iniciado;
-  float minimo;
-  float medio;
-  float largo;
-  float maximo; 
+  float rojo;
+  float amarillo;
+  float verde; 
 };
        
-int pulsador = 2;
+int PULSADOR = 2;
 int BUZZER = 6;
 bool autoaprendizaje = false;
 bool semaforo = false;
@@ -29,8 +30,10 @@ float DISTANCIA = 0;
 float lastDISTANCIA = 0;   
 float lastmm = 0;
 MisDistancias punto = {
- 0,0,0,0,0
+ 0,0,0,0
 };
+
+int counter = 0;
 
 // WS2812B -> Pin de Control.
 #define DATA_PIN 8
@@ -49,7 +52,7 @@ VL53L0X sensor;
 #define HIGH_ACCURACY
 
 void setup() {
-  pinMode(pulsador, INPUT_PULLUP); 
+  pinMode(PULSADOR, INPUT_PULLUP); 
   pinMode(LED_BUILTIN, OUTPUT); 
   pinMode(BUZZER, OUTPUT);  
   digitalWrite(BUZZER, HIGH);  
@@ -61,7 +64,7 @@ void setup() {
   sensor.setTimeout(500);
   if (!sensor.init())
   {
-    Serial.println("Fallo al Inicializar el Sensor?");
+    Serial.println("Fallo al Inicializar el Sensor VL53L0X!?.");
     while (1) 
     {
       digitalWrite(BUZZER, LOW);
@@ -94,11 +97,12 @@ void setup() {
   // Espera un tiempo para entrar a modo de calibracion.  
   for (int i=0; i<10; i++)
   {
-    if (digitalRead(pulsador) == LOW) 
+    if (digitalRead(PULSADOR) == LOW) 
     { 
       led_pink();
       delay(100);
-      while ( digitalRead(pulsador) == LOW );
+      Serial.println("Suelte el Pulsador para poder Calibrar la Distancia del Punto Minimo (Rojo).");
+      while ( digitalRead(PULSADOR) == LOW );
       led_blue();
       Serial.println("Modo Autoaprendizaje!!"); 
       autoaprendizaje = true;
@@ -106,6 +110,8 @@ void setup() {
     delay(100);
   }
   readConfig(); 
+  counter = 0;
+  lastmm = DISTANCIA_MAXIMA;
 }
 
 void loop() 
@@ -125,25 +131,30 @@ void loop()
 void meter(){  
   led_blue();
 
-  // Cuando seleccionamos la distancia deseado
+  // Cuando seleccionamos la distancia deseada
   // pulsamos el boton y graba los parametros en la eeprom
   // y pasa al estado de control.
-  if (digitalRead(pulsador) == LOW) 
+  if (digitalRead(PULSADOR) == LOW) 
   { 
     autoaprendizaje = false;
-    punto.maximo = DISTANCIA;
-    punto.minimo = DISTANCIA / 4;
-    punto.medio = DISTANCIA / 2;
-    punto.largo = punto.maximo - punto.minimo;   
+
+    // Si al calibrar no encuentra objeto enfrente y pulsamos x error
+    // graba los parameros x defecto (500, 1000, 2000 mm).
+    if (DISTANCIA > 8000)
+    {
+      DISTANCIA = DISTANCIA_MAXIMA / 2;
+    }
+    
+    punto.verde = DISTANCIA_MAXIMA; 
+    punto.rojo = DISTANCIA;
+    punto.amarillo = (punto.verde +  punto.rojo) / 2;  
     delay(100);  
-    Serial.print("Punto Minimo=");
-    Serial.println(punto.minimo);
-    Serial.print("Punto Medio=");
-    Serial.println(punto.medio);
-    Serial.print("Punto Largo=");
-    Serial.println(punto.largo);
-    Serial.print("Punto Maximo=");
-    Serial.println(punto.maximo);
+    Serial.print("Punto Maximo -> PUNTO VERDE = ");
+    Serial.println(punto.verde);
+    Serial.print("Punto Medio  -> PUNTO AMARILLO = ");
+    Serial.println(punto.amarillo);
+    Serial.print("Punto Minimo -> PUNTO ROJO =");
+    Serial.println(punto.rojo);
     writeConfig();
     readConfig();
   }
@@ -151,82 +162,121 @@ void meter(){
   {
     DISTANCIA = (sensor.readRangeSingleMillimeters()); 
     if (sensor.timeoutOccurred()) { Serial.print(" TIMEOUT"); }
-    Serial.print("Midiendo Distancia Maxima: " ); 
+    Serial.print("Midiendo Distancia Minima -> COVID : " ); 
     Serial.print(DISTANCIA);
-    Serial.println(" mm.");        
+    Serial.println(" mm.");
+ 
+    // Va a parpadear en azul para indicar el Modo de Calibracion.
+    if ( ! semaforo )
+    {
+       led_off();
+       semaforo = true;
+    }
+    else
+    {
+       led_blue();
+       semaforo = false;
+    }
   }
-  delay(100);
+  delay(50);
 }
 
-void control(){
+void control()
+{
   float mm = 0;
   mm = (sensor.readRangeSingleMillimeters());
   if (sensor.timeoutOccurred()) { Serial.print(" TIMEOUT"); }
-
-  if( (mm != 0)  /*&& (mm < 3000)*/ )
-  {
-    if (mm != lastmm)
-    {
-      Serial.print("Distancia Maxima -COVID-: ");    
-      Serial.print(punto.maximo);
-      Serial.println("mm.");
-      Serial.print("Distancia Medida Actual : ");    
-      Serial.print(mm);
-      Serial.println("mm.");
-      lastmm = mm;
-    }
-    
-    if ( mm  < punto.medio) 
-    {
-       digitalWrite(LED_BUILTIN, HIGH);    
-       digitalWrite(BUZZER, LOW);   
-    }
-    else
-    {
-       digitalWrite(LED_BUILTIN, LOW);
-       digitalWrite(BUZZER, HIGH);    
-    }
+  Serial.print("Distancia -COVID-: ");    
+  Serial.print(punto.rojo);
+  Serial.println("mm.");
+  Serial.print("Distancia Actual : ");    
+  Serial.print(mm);
+  Serial.print("mm.");
   
-    if ( mm  > punto.maximo) 
-    {     
-       led_green();
-    }
-    else if ( (mm  < punto.maximo) && (mm  > punto.largo) ) 
-    { 
-       led_yellow();
-    }
-    else if ( (mm  < punto.largo) && (mm  > punto.medio) ) 
-    { 
-      if ( ! semaforo )
+  // Si mm esta dentro del rango valido
+  // resetea en contador, y lo guarda.
+  if( (mm > 0) && (mm < 3000) )
+  {
+    lastmm = mm;
+    counter = 0;
+  }
+  // Pero si no detecta objeto enfrente
+  // lo pone para que sea estado verde
+  // cuando el contador es 10.
+  else if ( mm > 8100 )
+  {
+      if( counter < COUNTER_VACIO )
       {
-        led_off();
-        semaforo = true;
+        counter++;
       }
       else
       {
-        led_yellow();
-        semaforo = false;
-      }
-    }
-    else if (mm  < punto.medio)
-    { 
-       led_red();
-    } 
-    else
-    {
-      digitalWrite(BUZZER, HIGH); 
-      delay(1);
-    }
+        mm = 2001;
+        digitalWrite(BUZZER, HIGH); 
+        counter = 0;
+      } 
   }
-   else
+  // Si es cero lo filtra,
+  else if ( mm = 0 )
   {
-      // Apaga el buzzer cuando detecta error!!.
-      digitalWrite(BUZZER, HIGH); 
+      mm = lastmm;
+      digitalWrite(BUZZER, HIGH);
   }
-  //delay(10);
+  else
+  {
+    digitalWrite(BUZZER, HIGH); 
+  }
+  stateColor(mm);
 }
 
-
+void stateColor(float milis)
+{  
+  if ( milis  < punto.rojo) 
+  {
+    digitalWrite(LED_BUILTIN, HIGH);    
+    digitalWrite(BUZZER, LOW);   
+  }
+  else
+  {
+    digitalWrite(LED_BUILTIN, LOW);
+    digitalWrite(BUZZER, HIGH);    
+  }
+  
+  if ( milis  > punto.verde) 
+  {     
+    led_green();
+    Serial.println(" --Estado Verde--");
+  }
+  else if ( (milis  < punto.verde) && (milis  > punto.amarillo) ) 
+  { 
+    led_yellow();
+    Serial.println(" --Estado Amarillo--");
+  }
+  else if ( (milis  < punto.amarillo) && (milis  > punto.rojo) ) 
+  { 
+    if ( ! semaforo )
+    {
+      led_off();
+      semaforo = true;
+    }
+    else
+    {
+      led_yellow();
+      semaforo = false;
+    }
+    Serial.println(" --Estado Amarillo Parpadeando--");
+  }
+  else if (milis  < punto.rojo)
+  {     
+    led_red();
+    Serial.println(" --Estado Rojo--");
+  } 
+  else
+  {
+     Serial.println(" --Estado Desconocido.");
+    digitalWrite(BUZZER, HIGH); 
+  }
+}
 //.....................Funciones de Control de la Eeprom.............................
 void readConfig(){
   int eeAddress = sizeof(float);
@@ -238,15 +288,14 @@ void readConfig(){
     writeConfigDefecto();
     EEPROM.get(eeAddress, punto);
   } 
-  Serial.print("Punto Minimo = ");Serial.print(punto.minimo);Serial.println(" mm.");
-  Serial.print("Punto Medio = ");Serial.print(punto.medio);Serial.println(" mm.");
-  Serial.print("Punto Largo = ");Serial.print(punto.largo);Serial.println(" mm.");
-  Serial.print("Punto Maximo = ");Serial.print(punto.maximo);Serial.println(" mm."); 
+  Serial.print("Punto Minimo (---ROJO---)= ");Serial.print(punto.rojo);Serial.println(" mm.");
+  Serial.print("Punto Medio  (-AMARILLO-)= ");Serial.print(punto.amarillo);Serial.println(" mm.");
+  Serial.print("Punto Maximo (---VERDE--)= ");Serial.print(punto.verde);Serial.println(" mm."); 
 }
 void writeConfigDefecto(){
   int eeAddress = sizeof(float);
   MisDistancias puntosInit = {
-  0,500,1000,1500,2000
+  0,1000,1500,2000
   }; 
   Serial.println("Sistema Iniciado x Primera Vez!!.");
   EEPROM.put(eeAddress, puntosInit);
