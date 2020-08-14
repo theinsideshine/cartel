@@ -12,7 +12,16 @@
 
 #define NUM_LEDS 16
 #define DISTANCIA_MAXIMA 2000
+#define DISTANCIA_FRANJA 200
+#define DISTANCIA_DEFECTO 800
 #define COUNTER_VACIO 5
+
+#define ESTADO_ROJO 0
+#define ESTADO_AMARILLO 1
+#define ESTADO_VERDE 2
+#define ESTADO_AZUL 3
+#define ESTADO_BLANCO 4
+#define ESTADO_DESCONOCIDO 5
 
 struct MisDistancias {
   byte iniciado;
@@ -34,6 +43,8 @@ MisDistancias punto = {
 };
 
 int counter = 0;
+int estado = ESTADO_VERDE;
+int tiempo = 0;
 
 // WS2812B -> Pin de Control.
 #define DATA_PIN 8
@@ -92,7 +103,7 @@ void setup() {
   sensor.setMeasurementTimingBudget(200000);
 #endif
   
-  Serial.println("Sistema Inicializado Correctamente Sensor Listo!."); 
+  Serial.println("Sistema Inicializado Correctamente Sensor -> VL53L0X Preparado!."); 
 
   // Espera un tiempo para entrar a modo de calibracion.  
   for (int i=0; i<10; i++)
@@ -101,24 +112,27 @@ void setup() {
     { 
       led_pink();
       delay(100);
+      estado = ESTADO_BLANCO;
       Serial.println("Suelte el Pulsador para poder Calibrar la Distancia del Punto Minimo (Rojo).");
       while ( digitalRead(PULSADOR) == LOW );
       led_blue();
       Serial.println("Modo Autoaprendizaje!!"); 
       autoaprendizaje = true;
+      estado = ESTADO_AZUL;
     }   
     delay(100);
   }
   readConfig(); 
   counter = 0;
   lastmm = DISTANCIA_MAXIMA;
+  tiempo = 0;
 }
 
 void loop() 
 {  
   if ( autoaprendizaje )
   { 
-    meter();
+    calibracion();
   }
   else
   {
@@ -128,9 +142,8 @@ void loop()
 
 // Cuando entra a Modo de Calibracion se prende Azul.
 // Mientras va midiendo la distancia.
-void meter(){  
-  led_blue();
-
+void calibracion()
+{  
   // Cuando seleccionamos la distancia deseada
   // pulsamos el boton y graba los parametros en la eeprom
   // y pasa al estado de control.
@@ -139,22 +152,18 @@ void meter(){
     autoaprendizaje = false;
 
     // Si al calibrar no encuentra objeto enfrente y pulsamos x error
-    // graba los parameros x defecto (500, 1000, 2000 mm).
-    if (DISTANCIA > 8000)
+    // graba los parameros x defecto (xxx mm).
+    if ( DISTANCIA > ( DISTANCIA_MAXIMA -( 2 * DISTANCIA_FRANJA) ) )
     {
-      DISTANCIA = DISTANCIA_MAXIMA / 2;
-    }
-    
-    punto.verde = DISTANCIA_MAXIMA; 
+      DISTANCIA = DISTANCIA_DEFECTO;
+    }      
     punto.rojo = DISTANCIA;
-    punto.amarillo = (punto.verde +  punto.rojo) / 2;  
-    delay(100);  
-    Serial.print("Punto Maximo -> PUNTO VERDE = ");
-    Serial.println(punto.verde);
-    Serial.print("Punto Medio  -> PUNTO AMARILLO = ");
-    Serial.println(punto.amarillo);
-    Serial.print("Punto Minimo -> PUNTO ROJO =");
-    Serial.println(punto.rojo);
+    punto.amarillo = punto.rojo + DISTANCIA_FRANJA; 
+    punto.verde = punto.rojo + ( 2 * DISTANCIA_FRANJA );     
+    delay(100);     
+    Serial.print("Punto Maximo -> PUNTO VERDE = ");Serial.println(punto.verde);
+    Serial.print("Punto Medio  -> PUNTO AMARILLO = ");Serial.println(punto.amarillo);
+    Serial.print("Punto Minimo -> PUNTO ROJO =");Serial.println(punto.rojo);   
     writeConfig();
     readConfig();
   }
@@ -162,23 +171,49 @@ void meter(){
   {
     DISTANCIA = (sensor.readRangeSingleMillimeters()); 
     if (sensor.timeoutOccurred()) { Serial.print(" TIMEOUT"); }
-    Serial.print("Midiendo Distancia Minima -> COVID : " ); 
-    Serial.print(DISTANCIA);
-    Serial.println(" mm.");
- 
-    // Va a parpadear en azul para indicar el Modo de Calibracion.
-    if ( ! semaforo )
+    Serial.print("Midiendo Distancia Minima -> COVID : " );Serial.print(DISTANCIA);Serial.println(" mm."); 
+    
+    if ( DISTANCIA > ( DISTANCIA_MAXIMA -( 2 * DISTANCIA_FRANJA) ) )
     {
-       led_off();
-       semaforo = true;
+      Serial.print("La Maxima Distancia Permitida es:");Serial.print(( DISTANCIA_MAXIMA -( 2 * DISTANCIA_FRANJA) ));Serial.println(" mm.");
+      estado = ESTADO_ROJO;
     }
     else
     {
-       led_blue();
-       semaforo = false;
+       estado = ESTADO_AZUL;
     }
+
+    // Va a parpadear para indicar el Modo de Calibracion.
+    // Azul -> Rango Valido, Rojo -> Rango Exedido.
+    if ( ! semaforo )
+    {
+      led_off();  
+      semaforo = true;
+    }
+    else
+    {
+      if (estado == ESTADO_AZUL)
+      {
+        led_blue();
+        digitalWrite(BUZZER, HIGH);
+      }
+      else
+      {
+        led_red();
+        if (tiempo < 3)
+        {
+          digitalWrite(BUZZER, HIGH);
+          tiempo++;
+        }
+        else
+        {
+          digitalWrite(BUZZER, LOW);
+          tiempo = 0;            
+        }
+      }
+      semaforo = false;
+    }   
   }
-  delay(50);
 }
 
 void control()
@@ -186,12 +221,13 @@ void control()
   float mm = 0;
   mm = (sensor.readRangeSingleMillimeters());
   if (sensor.timeoutOccurred()) { Serial.print(" TIMEOUT"); }
-  Serial.print("Distancia -COVID-: ");    
-  Serial.print(punto.rojo);
-  Serial.println("mm.");
-  Serial.print("Distancia Actual : ");    
-  Serial.print(mm);
-  Serial.print("mm.");
+  Serial.print("Distancia -COVID-: ");Serial.print(punto.rojo);Serial.println(" mm.");    
+  Serial.print("Distancia Actual : ");Serial.print(mm);Serial.print(" mm.");   
+
+  if ( mm == 0 )
+  {
+    mm = lastmm;
+  }
   
   // Si mm esta dentro del rango valido
   // resetea en contador, y lo guarda.
@@ -246,37 +282,29 @@ void stateColor(float milis)
   {     
     led_green();
     Serial.println(" --Estado Verde--");
+    estado = ESTADO_VERDE;
   }
-  else if ( (milis  < punto.verde) && (milis  > punto.amarillo) ) 
+  else if ( (milis  < punto.verde) && (milis  > punto.rojo) ) 
   { 
     led_yellow();
     Serial.println(" --Estado Amarillo--");
-  }
-  else if ( (milis  < punto.amarillo) && (milis  > punto.rojo) ) 
-  { 
-    if ( ! semaforo )
-    {
-      led_off();
-      semaforo = true;
-    }
-    else
-    {
-      led_yellow();
-      semaforo = false;
-    }
-    Serial.println(" --Estado Amarillo Parpadeando--");
+    estado = ESTADO_AMARILLO;
   }
   else if (milis  < punto.rojo)
   {     
     led_red();
     Serial.println(" --Estado Rojo--");
+    estado = ESTADO_ROJO;
+    delay(1500);
   } 
   else
   {
-     Serial.println(" --Estado Desconocido.");
+    Serial.println(" --Estado Desconocido.");
     digitalWrite(BUZZER, HIGH); 
+    estado = ESTADO_DESCONOCIDO;
   }
 }
+
 //.....................Funciones de Control de la Eeprom.............................
 void readConfig(){
   int eeAddress = sizeof(float);
@@ -301,13 +329,13 @@ void writeConfigDefecto(){
   EEPROM.put(eeAddress, puntosInit);
   Serial.println("Grabando Configuracion x Defecto!1.....");  
 }
-
 void writeConfig(){
   int eeAddress = sizeof(float);
   EEPROM.put(eeAddress, punto);
   Serial.println("Grabando Configuracion de Autoaprendizaje!!........");  
 }
 //..................................................................................
+
 
 //.....................Funciones de Control del Led Inteligente.....................
 void led_red()
@@ -326,7 +354,6 @@ void led_green()
   }
   FastLED.show();  
 }
-
 void led_yellow()
 {
   for(int dot = 0; dot < NUM_LEDS; dot++) 
@@ -335,7 +362,6 @@ void led_yellow()
   }
   FastLED.show();
 }
-
 void led_blue()
 {
   for(int dot = 0; dot < NUM_LEDS; dot++) 
@@ -344,7 +370,6 @@ void led_blue()
   }
   FastLED.show();
 }
-
 void led_violet()
 {
   for(int dot = 0; dot < NUM_LEDS; dot++) 
@@ -353,7 +378,6 @@ void led_violet()
   }
   FastLED.show();
 }
-
 void led_pink()
 {
   for(int dot = 0; dot < NUM_LEDS; dot++) 
@@ -362,7 +386,6 @@ void led_pink()
   }
   FastLED.show();
 }
-
 void led_off()
 {
   for(int dot = 0; dot < NUM_LEDS; dot++) 
