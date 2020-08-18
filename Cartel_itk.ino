@@ -44,6 +44,7 @@ MisDistancias punto = {
 
 int counter = 0;
 int estado = ESTADO_VERDE;
+int lastEstado = ESTADO_VERDE;
 int tiempo = 0;
 
 // WS2812B -> Pin de Control.
@@ -238,7 +239,7 @@ void control()
   }
   // Pero si no detecta objeto enfrente
   // lo pone para que sea estado verde
-  // cuando el contador es 10.
+  // cuando el contador es 5.
   else if ( mm > 8100 )
   {
       if( counter < COUNTER_VACIO )
@@ -248,7 +249,6 @@ void control()
       else
       {
         mm = 2001;
-        digitalWrite(BUZZER, HIGH); 
         counter = 0;
       } 
   }
@@ -256,53 +256,85 @@ void control()
   else if ( mm = 0 )
   {
       mm = lastmm;
-      digitalWrite(BUZZER, HIGH);
   }
   else
   {
-    digitalWrite(BUZZER, HIGH); 
+    //digitalWrite(BUZZER, HIGH); 
   }
   stateColor(mm);
+  showColors(estado);
 }
 
 void stateColor(float milis)
 {  
-  if ( milis  < punto.rojo) 
-  {
-    digitalWrite(LED_BUILTIN, HIGH);    
-    digitalWrite(BUZZER, LOW);   
-  }
-  else
-  {
-    digitalWrite(LED_BUILTIN, LOW);
-    digitalWrite(BUZZER, HIGH);    
-  }
-  
+  // En funcion de la distancia halla el estado del color.
   if ( milis  > punto.verde) 
   {     
-    led_green();
-    Serial.println(" --Estado Verde--");
     estado = ESTADO_VERDE;
   }
   else if ( (milis  < punto.verde) && (milis  > punto.rojo) ) 
   { 
-    led_yellow();
-    Serial.println(" --Estado Amarillo--");
     estado = ESTADO_AMARILLO;
   }
   else if (milis  < punto.rojo)
   {     
-    led_red();
-    Serial.println(" --Estado Rojo--");
-    estado = ESTADO_ROJO;
-    delay(1500);
+    estado = ESTADO_ROJO;   
   } 
   else
   {
     Serial.println(" --Estado Desconocido.");
-    digitalWrite(BUZZER, HIGH); 
     estado = ESTADO_DESCONOCIDO;
   }
+}
+
+void showColors(int state)
+{
+  // Implementamos una pequeña maquinita de estados para controlar los 
+  // colores y el temporizador del color rojo y el buzzer.
+  switch (state)
+  {
+    case ESTADO_ROJO:
+        led_red();
+        digitalWrite(BUZZER, LOW); 
+        tiempo = 0;
+        Serial.println(" --Estado Rojo--");
+    break;
+    
+    case ESTADO_AMARILLO:
+        if( (lastEstado == ESTADO_ROJO) && (tiempo <= 8) )
+        {
+          led_red();
+          digitalWrite(BUZZER, LOW); 
+          tiempo++;
+          estado = ESTADO_ROJO;
+          Serial.println(" --Estado Rojo--");
+        }
+        else
+        {
+          led_yellow();
+          digitalWrite(BUZZER, HIGH); 
+          Serial.println(" --Estado Amarillo--");
+        }           
+    break;
+
+    case ESTADO_VERDE:
+         if( (lastEstado == ESTADO_ROJO) && (tiempo <= 8) )
+        {
+          led_red();
+          digitalWrite(BUZZER, LOW); 
+          tiempo++;
+          estado = ESTADO_ROJO;
+          Serial.println(" --Estado Rojo--");
+        }
+        else
+        {
+          led_green();
+          digitalWrite(BUZZER, HIGH); 
+          Serial.println(" --Estado Verde--");
+        }          
+    break;
+  }
+  lastEstado = estado; 
 }
 
 //.....................Funciones de Control de la Eeprom.............................
