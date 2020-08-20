@@ -220,10 +220,17 @@ void calibracion()
 void control()
 {
   float mm = 0;
-  mm = (sensor.readRangeSingleMillimeters());
-  if (sensor.timeoutOccurred()) { Serial.print(" TIMEOUT"); }
-  Serial.print("Distancia -COVID-: ");Serial.print(punto.rojo);Serial.println(" mm.");    
-  Serial.print("Distancia Actual : ");Serial.print(mm);Serial.print(" mm.");   
+  float mmBuff[3];
+  Serial.print("Distancia -COVID-: ");Serial.print(punto.rojo);Serial.println(" mm.");  
+  for (int i=0; i<3;i++)
+  {
+    mmBuff[i] = (sensor.readRangeSingleMillimeters());
+    if (sensor.timeoutOccurred()) { Serial.print(" TIMEOUT"); }   
+    Serial.print("Distancia ");Serial.print(i);Serial.print(" = ");Serial.print(mmBuff[i]);Serial.println(" mm.");
+    mm = mm + mmBuff[i];   
+  }
+  mm = mm / 3;
+  Serial.print("Promedio : ");Serial.print(mm);Serial.println(" mm.");
 
   if ( mm == 0 )
   {
@@ -240,7 +247,8 @@ void control()
   // Pero si no detecta objeto enfrente
   // lo pone para que sea estado verde
   // cuando el contador es 5.
-  else if ( mm > 8100 )
+  //else if ( mm > 8100 )
+  else if ( mm > 3000 )
   {
       if( counter < COUNTER_VACIO )
       {
@@ -301,7 +309,7 @@ void showColors(int state)
     break;
     
     case ESTADO_AMARILLO:
-        if( (lastEstado == ESTADO_ROJO) && (tiempo <= 8) )
+        if( (lastEstado == ESTADO_ROJO) && (tiempo <= 2) )
         {
           led_red();
           digitalWrite(BUZZER, LOW); 
@@ -318,7 +326,7 @@ void showColors(int state)
     break;
 
     case ESTADO_VERDE:
-         if( (lastEstado == ESTADO_ROJO) && (tiempo <= 8) )
+         if( (lastEstado == ESTADO_ROJO) && (tiempo <= 2) )
         {
           led_red();
           digitalWrite(BUZZER, LOW); 
