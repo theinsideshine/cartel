@@ -153,7 +153,7 @@ static uint16_t get_filtered_distance( void )
         sensor_buff[ index ] = val;
 
         // Para validar la muestra, los valores almacenados
-        // en el buffer no tienen que estar mas separados que 20 cm.
+        // en el buffer no tienen que estar separados mas que 20 cm.
         for (uint8_t x=0; x<SAMPLES_BUFFER_SIZE; x++){
           over_range = (abs(sensor_buff[ x ] - val) > 200);
 
@@ -169,7 +169,7 @@ static uint16_t get_filtered_distance( void )
           last_valid_val = val;
         }
     } else {
-        log_msg(F("Sensor error TIMEOUT"));
+        log_msg( F("Sensor error TIMEOUT") );
     }
   }
 
@@ -294,13 +294,13 @@ uint8_t state;
     // Para evitar sobrecargar la unidad serie, el log de la
     // informacion se realiza cada 100 mS.
     if( TIMER_IS_EXPIRED_MS( log_timer, LOG_CTRL_INFO_TIMEOUT ) ) {
-        log_msg( F("Distance = %d State = %d"), new_distance, state );
+        log_msg( F("distancia = %d estado = %d peligro = %d"),
+                 new_distance, state, dev_cfg->points.danger );
         TIMER_START_MS( log_timer );
     }
 }
 
-// Compara la distancia actual, con las franjas configuradas
-// para encontrar el estado actual.
+// Obtiene el estado comparando la distancia con las franjas configuradas.
 uint8_t get_state( DISTANCE_POINT* points, uint16_t val )
 {
 uint8_t state;
@@ -329,8 +329,8 @@ DEVICE_CONFIG local;
   dev_cfg->points.danger = local.points.danger;
   dev_cfg->buzzer_on = local.buzzer_on;
 
-  // Si detecta que la eeprom nunca fue inicializada, carga los parametros
-  // de fabrica.
+  // Carga los parametros de fabrica, cuando detecta que la eeprom
+  // no fue inicializada.
   if( dev_cfg->factory_reset != false ) {
     config_load_default_values( dev_cfg );
 
@@ -365,7 +365,7 @@ void config_buzzer_on_tgl( DEVICE_CONFIG* dev_cfg )
   log_msg( F("Habilitacion buzzer = %d"), dev_cfg->buzzer_on );
 }
 
-// Graba los parametros de configuracion en la EEPROM.
+// Graba los parametros de configuracion en la eeprom.
 void config_write( DEVICE_CONFIG* dev_cfg )
 {
 DEVICE_CONFIG local;
@@ -381,7 +381,8 @@ DEVICE_CONFIG local;
   log_msg( F("Grabando configuracion"), dev_cfg->buzzer_on );
 }
 
-//.....................Funciones de Control del Led Inteligente.....................
+// Actualiza el display de leds inteligentes, cuando el
+// color actual es diferente del anterior.
 void set_led( CRGB new_color )
 {
 static CRGB last_color = CRGB::Black;
@@ -421,7 +422,6 @@ void buzzer_toggle( void )
 
 // Inicializa los perfericos del cartel.
 void setup() {
-
   pinMode(PIN_CFG_BUTTON, INPUT_PULLUP);
   pinMode(LED_BUILTIN, OUTPUT);
   pinMode(PIN_BUZZER, OUTPUT);
@@ -437,12 +437,11 @@ void setup() {
   Wire.setClock(400000);
   sensor.setTimeout(500);
 
-  if (!sensor.init())
-  {
+  if ( !sensor.init() ){
     log_msg( F("Fallo al Inicializar el Sensor VL53L0X") );
-    while (1)
-    {
-      digitalWrite(PIN_BUZZER, LOW);
+    while (1) {
+      buzzer_toggle();
+
       set_led( CRGB::Blue );
       delay(1000);
       set_led( CRGB::Green );
