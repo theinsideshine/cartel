@@ -1,52 +1,75 @@
-/*  Lee el Sensor Tof y cambian de color
- *  los Leds cuando nos hacercamos a las
- *  distancias seleccionadas que guarda la eeprom.
- *  La calibracion se realiza x Auto Aprendizaje
- *  apuntando el equipo contra un objeto (pared).
-*/
-
+/**
+ * File:   Cartel para distanciamiento social (Covid-19).
+ *         Un sensor TOF (VL53L0x) lee la distancia del usuario, 
+ *         y modifica el color de leds inteligentes dependiendo 
+ *         de la zonas en la que se encuentre (peligro/precaucion/seguro).
+ *         
+ *         Despues de una condicion de reset, el operador puede calibrar la 
+ *         distancia del punto de peligro, que ademas se usa para definir las
+ *         dos zonas restantes que estan separadas por 20 cm.
+ *         
+ *         Mientras el equipo esta controlando, se puede usar el pulsador
+ *         para activar/desactivar el buzzer cuando el usuario esta en la zona
+ *         de peligro. 
+ *         
+ *         Para que la indicacion de peligro desaparezca, el usuario
+ *         tiene que salir de la zona por mas de 1 segundo.
+ *         
+ * - Compiler:           Arduino 1.8.13
+ * - Supported devices:  Nano
+ *
+ * \author               MM: mmartinez@intelektron.com
+ *                       JS: jschiavoni@intelektron.com
+ *
+ * Date:  22-08-2020
+ *
+ *      Intelektron SA Argentina.
+ */
 #include <Wire.h>
 #include <VL53L0X.h>
 #include <FastLED.h>
 #include <EEPROM.h>
 
-#define NUM_LEDS 16
-#define DISTANCIA_MAXIMA 2000
-#define DISTANCIA_FRANJA 200
-#define DISTANCIA_DEFECTO 800
-#define COUNTER_VACIO 5
+#define EEPRON_ADDRESS_CONFIG           4       // Direccion en la epprom donde se almacena la configuracion.
+#define NUM_LEDS                        16      // Cantidad de led 
 
-#define ESTADO_ROJO 0
-#define ESTADO_AMARILLO 1
-#define ESTADO_VERDE 2
-#define ESTADO_AZUL 3
-#define ESTADO_BLANCO 4
-#define ESTADO_DESCONOCIDO 5
+#define MAX_SENSOR_DISTANCE             2000    // Distancia maxima a la que puede leer el sensor.
+#define DISTANCE_BAND                   200     // Tamaño de la franja en mm.
+#define DANGER_DEFAULT                  800     // Distancia de peligro por defecto en mm.
+#define BUZZER_DEFAULT                  1       // El buzzer esta activado.
+  
+#define ST_UNKNOW                       0       // Estado desconocido.
+#define ST_DANGER                       1       // El usuario esta en peligro.
+#define ST_WARNING                      2       // El usuario tiene que tener precaucion.
+#define ST_SAFE                         3       // El usuario esta seguro.
 
-struct MisDistancias {
-  byte iniciado;
-  float rojo;
-  float amarillo;
-  float verde; 
-};
+#define SAMPLES_BUFFER_SIZE             4       // Tamaño del buffer de muestras de distancia.
+
+#define PIN_CFG_BUTTON                  2       // Pin del pulsador de configuracion.
+#define PIN_BUZZER                      6       // Pin del buzzer.
+
+#define ST_LOOP_INIT                    0       // Inicializa el programa (carga la configuracion).
+#define ST_LOOP_TIMER_CFG               1       // Temporizador de configuracion.
+#define ST_LOOP_WAIT_CFG_BUTTON_RELEACE 2       // Espera que el usuario libere el pulsador.
+#define ST_LOOP_CONFIG                  3       // Configura la distancia de peligro del cartel.
+#define ST_LOOP_RUN                     4       // Verifica la distancia del usuario.
+#define ST_INIT_TIMER_CHANGE_BUZZER     5       // Inicializa el timer para modificar el buzzer.
+        
+// Contiene la informacion de los puntos para definir,
+// la franja de precaucion, peligro y seguro. 
+typedef struct tag_DISTANCE_POINT {
+  uint16_t danger;
+  uint16_t warning;
+  uint16_t safe; 
+} DISTANCE_POINT;
+   
+// Contiene la informacion de configuracion del dispositivo. 
+typedef struct tag_DEVICE_CONFIG {
+  bool              factory_reset;
+  DISTANCE_POINT    points;
+  bool              buzzer_on;
+} DEVICE_CONFIG;
        
-int PULSADOR = 2;
-int BUZZER = 6;
-bool autoaprendizaje = false;
-bool semaforo = false;
-
-float DISTANCIA = 0;  
-float lastDISTANCIA = 0;   
-float lastmm = 0;
-MisDistancias punto = {
- 0,0,0,0
-};
-
-int counter = 0;
-int estado = ESTADO_VERDE;
-int lastEstado = ESTADO_VERDE;
-int tiempo = 0;
-
 // WS2812B -> Pin de Control.
 #define DATA_PIN 8
 // Array de Leds.
@@ -60,31 +83,355 @@ VL53L0X sensor;
 // - higher speed at the cost of lower accuracy OR
 // - higher accuracy at the cost of lower speed
 
-//#define HIGH_SPEED
-#define HIGH_ACCURACY
+#define HIGH_SPEED
+//#define HIGH_ACCURACY
 
+// Funciones para usar el temporizador no bloqueante
+// del arduino en milisegundos.
+#define TIMER_IS_EXPIRED_MS( tmr, us ) ((millis() - tmr) > us)
+#define TIMER_START_MS( tmr ) (tmr = millis())
+
+// Imprime una distancia (generalmente puntos)
+static void print_distance( const char* caption, uint16_t val )
+{
+  //Serial.print( caption );
+  //Serial.print( F(" = ") );
+  //Serial.print( val ) ; 
+  //Serial.println( F(" mm.") );
+}
+
+// Retorna true cuando el pulsador de programacion esta presionado.
+// Aplica un mecanizmo de antirebote.
+static bool button_debounced( void )
+{
+static uint32_t timer_debounce = 0;
+
+  bool val = (digitalRead( PIN_CFG_BUTTON ) == LOW);
+
+  // Despues que se presiona el pulsador debe permanecer 500 mS liberado.
+  if( val ) {
+    if( !TIMER_IS_EXPIRED_MS(timer_debounce, 500) ){
+      val = false;
+    }
+    
+    TIMER_START_MS( timer_debounce );
+  }
+
+  return val;
+}
+
+// Obtiene una muestra del sensor de distancia y le aplica los filtros correspondientes.
+static uint16_t get_filtered_distance( void )
+{
+  uint16_t          val; 
+  bool              over_range = false;
+  static uint8_t    index = 0;
+  static uint16_t   last_valid_val = 0;
+  static uint16_t   sensor_buff[ SAMPLES_BUFFER_SIZE ] = {0};
+     
+  if ( sensor.readRangeNoBlocking( val ) ) {
+    print_distance( "Valor del sensor", val );
+    
+    // Verifica que la distancia se obtenga sin problemas.
+    if (!sensor.timeoutOccurred()) { 
+        if (index++ >= SAMPLES_BUFFER_SIZE) {
+          index = 0;  
+        }
+  
+        sensor_buff[ index ] = val;
+  
+        // Para que validadr la muestra, los valores almacenados
+        // en el buffer no tienen que estar mas separados que 20 cm.  
+        for (uint8_t x=0; x<SAMPLES_BUFFER_SIZE; x++){
+          over_range = (abs(sensor_buff[ x ] - val) > 200);
+  
+          if (over_range) {
+            break;
+          }
+        }
+  
+        // Si las muestras no respetan la distancia, usa la ultima valida.
+        if (over_range){
+          val = last_valid_val;
+        }else{
+          last_valid_val = val;  
+        }
+    } else {  
+      Serial.println(F("Sensor error TIMEOUT")); 
+    }  
+  
+    print_distance("Distancia", val );
+  }
+    
+  return last_valid_val;  
+}
+
+// La distancia de calibracion, tiene que ser menor al maximo alcance del sensor (2 metros)
+// menos las distancias de las dos franjas.
+// Retorna true cuando es valida.
+bool check_max_calibration_distance( uint16_t val )
+{
+    return ( val < ( MAX_SENSOR_DISTANCE - ( 2 * DISTANCE_BAND) ) );
+}
+
+// Cuando entra a Modo de Calibracion se prende Azul.
+// Mientras va midiendo la distancia.
+bool calibracion( bool button, DEVICE_CONFIG* dev_cfg, uint16_t new_distance )
+{
+static uint8_t  blink_led = 0;
+static uint32_t blink_timer = 0;
+
+  // Cuando seleccionamos la distancia deseada
+  // pulsamos el boton y graba los parametros en la eeprom
+  // y pasa al estado de control.
+  if ( button ) { 
+    // No acepta valores fuera de rango.
+    if ( !check_max_calibration_distance( new_distance ) ) {
+      print_distance("La maxima distancia permitida es", (MAX_SENSOR_DISTANCE -( 2 * DISTANCE_BAND) ));
+      set_led( CRGB::Red );
+      buzzer_on();
+
+      // Fuerza un tick en estado de alarma.
+      TIMER_START_MS( blink_timer ); 
+      blink_led = false; 
+      button = false;       
+    } else {   
+      dev_cfg->points.danger = new_distance;
+      dev_cfg->points.warning = dev_cfg->points.danger + DISTANCE_BAND; 
+      dev_cfg->points.safe = dev_cfg->points.danger + ( 2 * DISTANCE_BAND );  
+      
+      print_distance("Punto seguro", dev_cfg->points.safe);
+      print_distance("Punto de precaucion", dev_cfg->points.warning);
+      print_distance("Punto de peligro=", dev_cfg->points.danger);   
+      
+      config_write( dev_cfg );
+    }
+  } else {
+    // Va a parpadear para indicar el Modo de Calibracion.
+    // Azul -> Rango Valido, Rojo -> Rango Excedido.
+    if( TIMER_IS_EXPIRED_MS( blink_timer, 500 ) ) {
+        TIMER_START_MS( blink_timer );  
+
+        blink_led = !blink_led;
+    }
+    
+    if( !blink_led ){
+      set_led( CRGB::Black );
+      buzzer_off();
+    }else{
+        set_led( CRGB::Blue );
+        buzzer_off();
+      //  Serial.println(F("Presione el pulsador para configurar la distancia"));
+    }
+  }
+  
+  return button;
+}
+ 
+// Controla la distancia del usuario con respecto al sensor.  
+void control( DEVICE_CONFIG* dev_cfg, uint16_t new_distance )
+{
+static uint8_t last_state = 0;
+static uint32_t danger_timer = 0;
+static uint32_t buzzer_timer = 0;
+uint8_t state;
+
+    state = get_state( &dev_cfg->points, new_distance );
+    
+    // Si el estado actual es peligro, resetea el timer de presentacion.
+    if( state == ST_DANGER ) {
+        TIMER_START_MS( danger_timer );
+    // Si el anterior fue peligro, pero el actual no, y el timer no expiro
+    // entonces continua en estado de peligro.
+    } else if( (last_state == ST_DANGER) && !TIMER_IS_EXPIRED_MS( danger_timer, 1000 ) ) {
+        state = last_state;
+    // Cuando sale de las condiciones de peligro, resetea el buzzer y el temporizador.
+    } else {
+        buzzer_off();
+        TIMER_START_MS( buzzer_timer );
+        TIMER_START_MS( danger_timer );
+    }
+    
+    switch( state ) {
+        case ST_WARNING:
+            set_led( CRGB::Yellow );
+        break;
+          
+        case ST_DANGER:
+            set_led( CRGB::Red );
+            
+            // Si el buzzer esta actibado, lo prende en forma intermitente cada 400 mS
+            if(dev_cfg->buzzer_on) {
+              if( TIMER_IS_EXPIRED_MS( buzzer_timer, 300 ) ) {
+                  buzzer_toggle();
+                  TIMER_START_MS( buzzer_timer );
+              }
+            }else{
+              buzzer_off(); 
+            }
+        break;
+        
+        default:
+        case ST_SAFE:
+            set_led( CRGB::Green );
+        break;
+    }
+
+    last_state = state;
+}
+
+// Compara la distancia actual, con las franjas configuradas 
+// para encontrar el estado actual.
+uint8_t get_state( DISTANCE_POINT* points, uint16_t val )
+{  
+uint8_t state;
+
+  if ( val < points->danger ) {     
+    state = ST_DANGER;
+    print_distance("Menor que danger", points->danger);
+  } else if ( (val > points->danger) && (val < points->warning) ) { 
+    state = ST_WARNING;
+    print_distance("Menor que precaucion", points->warning);
+  } else {     
+    state = ST_SAFE;   
+    print_distance("Mayor que seguro", points->safe);
+  } 
+  
+  return state;
+}
+
+// Lee los parametros de configuracion de la eeprom.
+void config_read( DEVICE_CONFIG* dev_cfg )
+{
+DEVICE_CONFIG local;
+
+  EEPROM.get( EEPRON_ADDRESS_CONFIG, local );
+
+  dev_cfg->factory_reset = local.factory_reset;
+  dev_cfg->points.safe = local.points.safe;
+  dev_cfg->points.warning = local.points.warning;
+  dev_cfg->points.danger = local.points.danger; 
+  dev_cfg->buzzer_on = local.buzzer_on;
+  
+  Serial.println(F("Leyendo las distancias almacenadas en la eeprom."));
+  
+  // Si detecta que la eeprom nunca fue inicializada, carga los parametros
+  // de fabrica.
+  if( dev_cfg->factory_reset != false ) {
+    config_load_default_values( dev_cfg );
+    
+    config_write( dev_cfg );
+  } 
+  
+  print_distance("Punto seguro", dev_cfg->points.safe);
+  print_distance("Punto de precaucion", dev_cfg->points.warning);
+  print_distance("Punto de peligro", dev_cfg->points.danger);   
+  
+  Serial.print(F("Buzzer enable = ")); Serial.println( dev_cfg->buzzer_on );
+}
+
+// Carga los parametros de configuracion por defecto.
+void config_load_default_values( DEVICE_CONFIG* dev_cfg )
+{
+  dev_cfg->factory_reset    = false;
+  dev_cfg->points.safe      = DANGER_DEFAULT + (DISTANCE_BAND * 2);
+  dev_cfg->points.warning   = DANGER_DEFAULT + DISTANCE_BAND;
+  dev_cfg->points.danger    = DANGER_DEFAULT; 
+  dev_cfg->buzzer_on        = BUZZER_DEFAULT;
+    
+  Serial.println(F("Sistema iniciado por primera vez!!."));
+}
+
+// Invierte la habilitacion del buzzer, y lo almacena en la eeprom.
+void config_buzzer_on_tgl( DEVICE_CONFIG* dev_cfg )
+{
+  dev_cfg->buzzer_on = !dev_cfg->buzzer_on;  
+  config_write( dev_cfg );
+
+  Serial.print(F("Habilitacion buzzer = "));
+  Serial.println(dev_cfg->buzzer_on);
+}
+
+// Graba los parametros de configuracion en la EEPROM.
+void config_write( DEVICE_CONFIG* dev_cfg )
+{
+DEVICE_CONFIG local;
+
+  local.factory_reset = dev_cfg->factory_reset;
+  local.points.safe = dev_cfg->points.safe;
+  local.points.warning = dev_cfg->points.warning;
+  local.points.danger = dev_cfg->points.danger; 
+  local.buzzer_on = dev_cfg->buzzer_on;
+  
+  EEPROM.put( EEPRON_ADDRESS_CONFIG, local );
+
+  Serial.println(F("Grabando configuracion!!........"));  
+}
+
+//.....................Funciones de Control del Led Inteligente.....................
+void set_led( CRGB new_color )
+{
+static CRGB last_color = CRGB::Black;
+
+  if( last_color != new_color ){
+    for(uint8_t dot = 0; dot < NUM_LEDS; dot++) { 
+      leds[dot] = new_color;
+    }
+    
+    FastLED.show(); 
+
+    last_color = new_color;
+  }
+}
+
+// Activa el buzzer.
+void buzzer_on( void )
+{
+    digitalWrite(PIN_BUZZER, LOW);
+}
+
+// Apaga el buzzer.
+void buzzer_off( void )
+{
+    digitalWrite(PIN_BUZZER, HIGH);
+}
+
+// Cambia de estado el buzzer.
+void buzzer_toggle( void )
+{
+    if (digitalRead( PIN_BUZZER ) == LOW){
+        buzzer_off();   
+    }else{
+        buzzer_on();
+    }
+}
+
+// Inicializa los perfericos del cartel.
 void setup() {
-  pinMode(PULSADOR, INPUT_PULLUP); 
+  
+  pinMode(PIN_CFG_BUTTON, INPUT_PULLUP); 
   pinMode(LED_BUILTIN, OUTPUT); 
-  pinMode(BUZZER, OUTPUT);  
-  digitalWrite(BUZZER, HIGH);  
-  FastLED.addLeds<WS2812B, DATA_PIN, RGB>(leds, NUM_LEDS);
+  pinMode(PIN_BUZZER, OUTPUT);  
+  digitalWrite(PIN_BUZZER, HIGH);  
+  
+  FastLED.addLeds<WS2812B, DATA_PIN, GRB>(leds, NUM_LEDS);
   Serial.begin(115200);  
-  Serial.println("Inicializacion del Sistema en Curso...");
+  Serial.println(F("Inicializacion del Sistema en Curso..."));
   Wire.begin();
   Wire.setClock(400000);
   sensor.setTimeout(500);
+  
   if (!sensor.init())
   {
-    Serial.println("Fallo al Inicializar el Sensor VL53L0X!?.");
+    Serial.println(F("Fallo al Inicializar el Sensor VL53L0X!?."));
     while (1) 
     {
-      digitalWrite(BUZZER, LOW);
-      led_blue();
+      digitalWrite(PIN_BUZZER, LOW);
+      set_led( CRGB::Blue ); 
       delay(1000);
-      led_green();
+      set_led( CRGB::Green );
       delay(2000);
-      led_red();
+      set_led( CRGB::Red );
       delay(500);      
     }
   }
@@ -104,334 +451,70 @@ void setup() {
   sensor.setMeasurementTimingBudget(200000);
 #endif
   
-  Serial.println("Sistema Inicializado Correctamente Sensor -> VL53L0X Preparado!."); 
-
-  // Espera un tiempo para entrar a modo de calibracion.  
-  for (int i=0; i<10; i++)
-  {
-    if (digitalRead(PULSADOR) == LOW) 
-    { 
-      led_pink();
-      delay(100);
-      estado = ESTADO_BLANCO;
-      Serial.println("Suelte el Pulsador para poder Calibrar la Distancia del Punto Minimo (Rojo).");
-      while ( digitalRead(PULSADOR) == LOW );
-      led_blue();
-      Serial.println("Modo Autoaprendizaje!!"); 
-      autoaprendizaje = true;
-      estado = ESTADO_AZUL;
-    }   
-    delay(100);
-  }
-  readConfig(); 
-  counter = 0;
-  lastmm = DISTANCIA_MAXIMA;
-  tiempo = 0;
+  Serial.println(F("Sistema Inicializado Correctamente Sensor -> VL53L0X Preparado!.")); 
 }
 
+// Loop de control del cartel de distanciamiento.
 void loop() 
-{  
-  if ( autoaprendizaje )
-  { 
-    calibracion();
-  }
-  else
-  {
-    control();   
-  }
-}
-
-// Cuando entra a Modo de Calibracion se prende Azul.
-// Mientras va midiendo la distancia.
-void calibracion()
-{  
-  // Cuando seleccionamos la distancia deseada
-  // pulsamos el boton y graba los parametros en la eeprom
-  // y pasa al estado de control.
-  if (digitalRead(PULSADOR) == LOW) 
-  { 
-    autoaprendizaje = false;
-
-    // Si al calibrar no encuentra objeto enfrente y pulsamos x error
-    // graba los parameros x defecto (xxx mm).
-    if ( DISTANCIA > ( DISTANCIA_MAXIMA -( 2 * DISTANCIA_FRANJA) ) )
-    {
-      DISTANCIA = DISTANCIA_DEFECTO;
-    }      
-    punto.rojo = DISTANCIA;
-    punto.amarillo = punto.rojo + DISTANCIA_FRANJA; 
-    punto.verde = punto.rojo + ( 2 * DISTANCIA_FRANJA );     
-    delay(100);     
-    Serial.print("Punto Maximo -> PUNTO VERDE = ");Serial.println(punto.verde);
-    Serial.print("Punto Medio  -> PUNTO AMARILLO = ");Serial.println(punto.amarillo);
-    Serial.print("Punto Minimo -> PUNTO ROJO =");Serial.println(punto.rojo);   
-    writeConfig();
-    readConfig();
-  }
-  else
-  {
-    DISTANCIA = (sensor.readRangeSingleMillimeters()); 
-    if (sensor.timeoutOccurred()) { Serial.print(" TIMEOUT"); }
-    Serial.print("Midiendo Distancia Minima -> COVID : " );Serial.print(DISTANCIA);Serial.println(" mm."); 
+{
+bool                  button;  
+uint16_t              val;
+static DEVICE_CONFIG  dev_cfg; 
+static uint32_t       timer = 0;
+static uint8_t        st_loop = ST_LOOP_INIT;
     
-    if ( DISTANCIA > ( DISTANCIA_MAXIMA -( 2 * DISTANCIA_FRANJA) ) )
-    {
-      Serial.print("La Maxima Distancia Permitida es:");Serial.print(( DISTANCIA_MAXIMA -( 2 * DISTANCIA_FRANJA) ));Serial.println(" mm.");
-      estado = ESTADO_ROJO;
-    }
-    else
-    {
-       estado = ESTADO_AZUL;
-    }
-
-    // Va a parpadear para indicar el Modo de Calibracion.
-    // Azul -> Rango Valido, Rojo -> Rango Exedido.
-    if ( ! semaforo )
-    {
-      led_off();  
-      semaforo = true;
-    }
-    else
-    {
-      if (estado == ESTADO_AZUL)
-      {
-        led_blue();
-        digitalWrite(BUZZER, HIGH);
-      }
-      else
-      {
-        led_red();
-        if (tiempo < 3)
-        {
-          digitalWrite(BUZZER, HIGH);
-          tiempo++;
-        }
-        else
-        {
-          digitalWrite(BUZZER, LOW);
-          tiempo = 0;            
-        }
-      }
-      semaforo = false;
-    }   
-  }
-}
-
-void control()
-{
-  float mm = 0;
-  float mmBuff[3];
-  Serial.print("Distancia -COVID-: ");Serial.print(punto.rojo);Serial.println(" mm.");  
-  for (int i=0; i<3;i++)
-  {
-    mmBuff[i] = (sensor.readRangeSingleMillimeters());
-    if (sensor.timeoutOccurred()) { Serial.print(" TIMEOUT"); }   
-    Serial.print("Distancia ");Serial.print(i);Serial.print(" = ");Serial.print(mmBuff[i]);Serial.println(" mm.");
-    mm = mm + mmBuff[i];   
-  }
-  mm = mm / 3;
-  Serial.print("Promedio : ");Serial.print(mm);Serial.println(" mm.");
-
-  if ( mm == 0 )
-  {
-    mm = lastmm;
-  }
-  
-  // Si mm esta dentro del rango valido
-  // resetea en contador, y lo guarda.
-  if( (mm > 0) && (mm < 3000) )
-  {
-    lastmm = mm;
-    counter = 0;
-  }
-  // Pero si no detecta objeto enfrente
-  // lo pone para que sea estado verde
-  // cuando el contador es 5.
-  //else if ( mm > 8100 )
-  else if ( mm > 3000 )
-  {
-      if( counter < COUNTER_VACIO )
-      {
-        counter++;
-      }
-      else
-      {
-        mm = 2001;
-        counter = 0;
-      } 
-  }
-  // Si es cero lo filtra,
-  else if ( mm = 0 )
-  {
-      mm = lastmm;
-  }
-  else
-  {
-    //digitalWrite(BUZZER, HIGH); 
-  }
-  stateColor(mm);
-  showColors(estado);
-}
-
-void stateColor(float milis)
-{  
-  // En funcion de la distancia halla el estado del color.
-  if ( milis  > punto.verde) 
-  {     
-    estado = ESTADO_VERDE;
-  }
-  else if ( (milis  < punto.verde) && (milis  > punto.rojo) ) 
-  { 
-    estado = ESTADO_AMARILLO;
-  }
-  else if (milis  < punto.rojo)
-  {     
-    estado = ESTADO_ROJO;   
-  } 
-  else
-  {
-    Serial.println(" --Estado Desconocido.");
-    estado = ESTADO_DESCONOCIDO;
-  }
-}
-
-void showColors(int state)
-{
-  // Implementamos una pequeña maquinita de estados para controlar los 
-  // colores y el temporizador del color rojo y el buzzer.
-  switch (state)
-  {
-    case ESTADO_ROJO:
-        led_red();
-        digitalWrite(BUZZER, LOW); 
-        tiempo = 0;
-        Serial.println(" --Estado Rojo--");
-    break;
+    val = get_filtered_distance();
     
-    case ESTADO_AMARILLO:
-        if( (lastEstado == ESTADO_ROJO) && (tiempo <= 2) )
-        {
-          led_red();
-          digitalWrite(BUZZER, LOW); 
-          tiempo++;
-          estado = ESTADO_ROJO;
-          Serial.println(" --Estado Rojo--");
-        }
-        else
-        {
-          led_yellow();
-          digitalWrite(BUZZER, HIGH); 
-          Serial.println(" --Estado Amarillo--");
-        }           
-    break;
+    button = button_debounced();
+    
+    switch( st_loop ) {
+        // Carga los valores de la configuracion y pasa al estado temporizado
+        // donde espera que el usuario configure la distancia de peligro.
+        case ST_LOOP_INIT:
+            st_loop = ST_LOOP_TIMER_CFG;
+            TIMER_START_MS( timer );
+            
+            config_read( &dev_cfg );
+            set_led( CRGB::Blue );
+        break;
+        
+        case ST_LOOP_TIMER_CFG:
+            // Si el operador presiona el pulsador activa la secuencia de configuracion.
+            // Si expira el temporizador pasa al estado de control de distancia. 
+            if ( button ) { 
+              set_led( CRGB::Pink );
+      
+              Serial.println(F("Suelte el pulsador para calibrar la distancia de peligro (Rojo)."));
+              
+              st_loop = ST_LOOP_CONFIG;
+            } else if( TIMER_IS_EXPIRED_MS( timer, 5000 ) ){
+                st_loop = ST_INIT_TIMER_CHANGE_BUZZER;
+            }
+        break;
+                
+        case ST_LOOP_CONFIG: 
+            // De la rutina de configuracion, sale cuando el usuario presiona el pulsador
+            // y el valor que lee del sensor esta dentro del rango permitido.
+            if( calibracion( button, &dev_cfg, val ) ) {     
+                st_loop = ST_INIT_TIMER_CHANGE_BUZZER;
+            }
+        break;
 
-    case ESTADO_VERDE:
-         if( (lastEstado == ESTADO_ROJO) && (tiempo <= 2) )
-        {
-          led_red();
-          digitalWrite(BUZZER, LOW); 
-          tiempo++;
-          estado = ESTADO_ROJO;
-          Serial.println(" --Estado Rojo--");
-        }
-        else
-        {
-          led_green();
-          digitalWrite(BUZZER, HIGH); 
-          Serial.println(" --Estado Verde--");
-        }          
-    break;
-  }
-  lastEstado = estado; 
+        case ST_INIT_TIMER_CHANGE_BUZZER:
+          TIMER_START_MS( timer );
+          st_loop = ST_LOOP_RUN;
+        break;
+        
+        default:
+          st_loop = ST_LOOP_RUN;
+        case ST_LOOP_RUN: 
+            // Si el tiempo expiro, cada vez que se presiona el pulsado, invierte la 
+            // habilitacion del buzzer. 
+            if( TIMER_IS_EXPIRED_MS( timer, 1000 ) && button ){
+                config_buzzer_on_tgl( &dev_cfg );
+                st_loop = ST_INIT_TIMER_CHANGE_BUZZER;
+            }
+            
+            control( &dev_cfg, val );   
+    }
 }
-
-//.....................Funciones de Control de la Eeprom.............................
-void readConfig(){
-  int eeAddress = sizeof(float);
-
-  EEPROM.get(eeAddress, punto);
-  Serial.println(" Leyendo las Distancias almacenadas en la Eeprom.");
-  if( punto.iniciado != 0 )
-  {
-    writeConfigDefecto();
-    EEPROM.get(eeAddress, punto);
-  } 
-  Serial.print("Punto Minimo (---ROJO---)= ");Serial.print(punto.rojo);Serial.println(" mm.");
-  Serial.print("Punto Medio  (-AMARILLO-)= ");Serial.print(punto.amarillo);Serial.println(" mm.");
-  Serial.print("Punto Maximo (---VERDE--)= ");Serial.print(punto.verde);Serial.println(" mm."); 
-}
-void writeConfigDefecto(){
-  int eeAddress = sizeof(float);
-  MisDistancias puntosInit = {
-  0,1000,1500,2000
-  }; 
-  Serial.println("Sistema Iniciado x Primera Vez!!.");
-  EEPROM.put(eeAddress, puntosInit);
-  Serial.println("Grabando Configuracion x Defecto!1.....");  
-}
-void writeConfig(){
-  int eeAddress = sizeof(float);
-  EEPROM.put(eeAddress, punto);
-  Serial.println("Grabando Configuracion de Autoaprendizaje!!........");  
-}
-//..................................................................................
-
-
-//.....................Funciones de Control del Led Inteligente.....................
-void led_red()
-{
-  for(int dot = 0; dot < NUM_LEDS; dot++) 
-  { 
-    leds[dot] = CRGB::Green;
-  }
-  FastLED.show(); 
-}
-void led_green()
-{
-  for(int dot = 0; dot < NUM_LEDS; dot++) 
-  { 
-    leds[dot] = CRGB::Red;
-  }
-  FastLED.show();  
-}
-void led_yellow()
-{
-  for(int dot = 0; dot < NUM_LEDS; dot++) 
-  { 
-    leds[dot] = CRGB::Yellow;
-  }
-  FastLED.show();
-}
-void led_blue()
-{
-  for(int dot = 0; dot < NUM_LEDS; dot++) 
-  { 
-    leds[dot] = CRGB::Blue;
-  }
-  FastLED.show();
-}
-void led_violet()
-{
-  for(int dot = 0; dot < NUM_LEDS; dot++) 
-  { 
-    leds[dot] = CRGB::Violet;
-  }
-  FastLED.show();
-}
-void led_pink()
-{
-  for(int dot = 0; dot < NUM_LEDS; dot++) 
-  { 
-    leds[dot] = CRGB::Pink;
-  }
-  FastLED.show();
-}
-void led_off()
-{
-  for(int dot = 0; dot < NUM_LEDS; dot++) 
-  { 
-    leds[dot] = CRGB::Black;
-  }
-  FastLED.show();
-}
-//----------------------------------------------------------------------------------
