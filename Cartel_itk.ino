@@ -162,7 +162,15 @@ static uint16_t   last_valid_val = 0;
 static uint16_t   sensor_buff[ SAMPLES_BUFFER_SIZE ] = {0};
 
   // La funcion comienza la lectura de un rango en forma no bloqueante.
-  if ( (sample.result = sensor.readRangeNoBlocking( sample.raw )) ) {
+  sample.result = sensor.readRangeNoBlocking( sample.raw );
+
+  // Descarta los valores validos en cero.
+  if( sample.result && sample.raw == 0 ){
+      sample.result = false;
+  }
+  
+  // La funcion comienza la lectura de un rango en forma no bloqueante.
+  if ( sample.result ) ) {
     // Procesa el valor cuando distancia se obtuvo sin problemas.
     if (!sensor.timeoutOccurred()) {
         if (index++ >= SAMPLES_BUFFER_SIZE) {
@@ -201,7 +209,14 @@ static void get_filtered_distance( SAMPLE_INFO& sample )
 static double output;
 
   // La funcion comienza la lectura de un rango en forma no bloqueante.
-  if ( (sample.result = sensor.readRangeNoBlocking( sample.raw )) ) {
+  sample.result = sensor.readRangeNoBlocking( sample.raw );
+
+  // Descarta los valores validos en cero.
+  if( sample.result && sample.raw == 0 ){
+      sample.result = false;
+  }
+  
+  if ( sample.result ) {
     // Procesa el valor cuando la distancia se obtuvo sin problemas.
     if (!sensor.timeoutOccurred()) {
         output = EWMA_ALPHA * ( ((double)sample.raw) - output ) + output;
