@@ -65,8 +65,6 @@
 #define FILTER_EWMA                             // Selecciona el tipo de filtro que se va a usar para
                                                 // posprocesar la distancia del sensor.
 
-                                                // Contiene la informacion de configuracion del dispositivo.
-
 // Informacion de la muestra necesaria para implementar
 // un sistema de log con el proposito de estudiar el
 // comportamiento del filtro.
@@ -171,7 +169,7 @@ static uint16_t   sensor_buff[ SAMPLES_BUFFER_SIZE ] = {0};
           index = 0;
         }
 
-        sensor_buff[ index ] = raw_input;
+        sensor_buff[ index ] = sample.raw;
 
         // Para validar la muestra, los valores almacenados
         // en el buffer no tienen que estar separados mas que 20 cm.
@@ -187,12 +185,12 @@ static uint16_t   sensor_buff[ SAMPLES_BUFFER_SIZE ] = {0};
         if (!over_range){
           last_valid_val = sample.raw;
         }
-
-        sample.filtered = last_valid_val;
     } else {
         log_msg( F("Sensor error TIMEOUT") );
     }
   }
+
+  sample.filtered = last_valid_val;
 }
 #elif defined( FILTER_EWMA )
 // Obtiene una muestra del sensor de distancia y le aplica los filtros correspondientes.
@@ -207,11 +205,12 @@ static double output;
     // Procesa el valor cuando la distancia se obtuvo sin problemas.
     if (!sensor.timeoutOccurred()) {
         output = EWMA_ALPHA * ( ((double)sample.raw) - output ) + output;
-        sample.filtered = ((uint16_t) output);
     } else {
         log_msg( F("Sensor error TIMEOUT") );
     }
   }
+
+  sample.filtered = ((uint16_t) output);
 }
 #endif
 
