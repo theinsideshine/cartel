@@ -65,6 +65,17 @@
 #define FILTER_EWMA                             // Selecciona el tipo de filtro que se va a usar para
                                                 // posprocesar la distancia del sensor.
 
+                                                // Contiene la informacion de configuracion del dispositivo.
+
+// Informacion de la muestra necesaria para implementar
+// un sistema de log con el proposito de estudiar el
+// comportamiento del filtro.
+typedef struct tag_SAMPLE_INFO {
+  bool      result;                 // TRUE se obtuvo muestra valida.
+  uint16_t  raw;                    // Valor en crudo.
+  uint16_t filtered;                // Valor filtrado.
+} SAMPLE_INFO;
+
 // Contiene la informacion de los puntos para definir,
 // la franja de precaucion, peligro y seguro.
 typedef struct tag_DISTANCE_POINT {
@@ -144,23 +155,23 @@ static uint32_t timer_debounce = 0;
 
 #if defined( FILTER_CUSTOM )
 // Obtiene una muestra del sensor de distancia y le aplica los filtros correspondientes.
-static uint16_t get_filtered_distance( void )
+// La funcion retorna el valor en crudo para propositos de estudio del filtro.
+static void get_filtered_distance( SAMPLE_INFO& sample )
 {
-  uint16_t          val;
-  bool              over_range = false;
-  static uint8_t    index = 0;
-  static uint16_t   last_valid_val = 0;
-  static uint16_t   sensor_buff[ SAMPLES_BUFFER_SIZE ] = {0};
+bool              over_range = false;
+static uint8_t    index = 0;
+static uint16_t   last_valid_val = 0;
+static uint16_t   sensor_buff[ SAMPLES_BUFFER_SIZE ] = {0};
 
   // La funcion comienza la lectura de un rango en forma no bloqueante.
-  if ( sensor.readRangeNoBlocking( val ) ) {
+  if ( (sample.result = sensor.readRangeNoBlocking( sample.raw )) ) {
     // Procesa el valor cuando distancia se obtuvo sin problemas.
     if (!sensor.timeoutOccurred()) {
         if (index++ >= SAMPLES_BUFFER_SIZE) {
           index = 0;
         }
 
-        sensor_buff[ index ] = val;
+        sensor_buff[ index ] = raw_input;
 
         // Para validar la muestra, los valores almacenados
         // en el buffer no tienen que estar separados mas que 20 cm.
@@ -172,39 +183,35 @@ static uint16_t get_filtered_distance( void )
           }
         }
 
-        // Si las muestras no respetan la distancia, usa la ultima valida.
-        if (over_range){
-          val = last_valid_val;
-        }else{
-          last_valid_val = val;
+        // Cuando el valor cumple con la condicion, valida la muestra.
+        if (!over_range){
+          last_valid_val = sample.raw;
         }
+
+        sample.filtered = last_valid_val;
     } else {
         log_msg( F("Sensor error TIMEOUT") );
     }
   }
-
-  return last_valid_val;
 }
 #elif defined( FILTER_EWMA )
 // Obtiene una muestra del sensor de distancia y le aplica los filtros correspondientes.
 // EWMA Filter - Exponentially Weighted Moving Average filter used for smoothing
 // data series readings.
-static uint16_t get_filtered_distance( void )
+static void get_filtered_distance( SAMPLE_INFO& sample )
 {
-  uint16_t          input;
-  static double     output;
+static double output;
 
   // La funcion comienza la lectura de un rango en forma no bloqueante.
-  if ( sensor.readRangeNoBlocking( input ) ) {
+  if ( (sample.result = sensor.readRangeNoBlocking( sample.raw )) ) {
     // Procesa el valor cuando la distancia se obtuvo sin problemas.
     if (!sensor.timeoutOccurred()) {
-        output = EWMA_ALPHA * ( ((double)input) - output ) + output;
+        output = EWMA_ALPHA * ( ((double)sample.raw) - output ) + output;
+        sample.filtered = ((uint16_t) output);
     } else {
         log_msg( F("Sensor error TIMEOUT") );
     }
   }
-
-  return ((uint16_t) output);
 }
 #endif
 
@@ -273,16 +280,15 @@ static uint32_t blink_timer = 0;
 }
 
 // Controla la distancia del usuario con respecto al sensor.
-void control( DEVICE_CONFIG* dev_cfg, uint16_t new_distance )
+void control( DEVICE_CONFIG* dev_cfg, SAMPLE_INFO& sample )
 {
 static uint8_t  last_state = 0;
 static uint32_t danger_timer = 0;
 static uint32_t buzzer_timer = 0;
-static uint32_t log_timer = 0;
 uint8_t state;
 static uint32_t buzzer_time = TIME_DANGER_ON;         // Variable para controlar el ton/toff del buzzer.
 
-    state = get_state( &dev_cfg->points, new_distance );
+    state = get_state( &dev_cfg->points, sample.filtered );
 
     // Si el estado actual es peligro, resetea el timer de presentacion.
     if( state == ST_DANGER ) {
@@ -328,11 +334,10 @@ static uint32_t buzzer_time = TIME_DANGER_ON;         // Variable para controlar
     last_state = state;
 
     // Para evitar sobrecargar la unidad serie, logea la informacion
-    // de control cada 100 mS.
-    if( TIMER_IS_EXPIRED_MS( log_timer, LOG_CTRL_INFO_TIMEOUT ) ) {
-        log_msg( F("distancia = %d estado = %d peligro = %d"),
-                 new_distance, state, dev_cfg->points.danger );
-        TIMER_START_MS( log_timer );
+    // de control cada vez que hay una muestra nueva.
+    if( sample.result ) {
+        log_msg( F("raw = %d distancia = %d estado = %d peligro = %d"),
+                 sample.raw, sample.filtered, state, dev_cfg->points.danger );
     }
 }
 
@@ -525,13 +530,14 @@ bool check_bands( DISTANCE_POINT* points )
 void loop()
 {
 bool                  button;
-uint16_t              val;
+
 static DEVICE_CONFIG  dev_cfg;
 static uint32_t       timer = 0;
 static uint8_t        st_loop = ST_LOOP_INIT;
 static bool           bands_ok = false;
+SAMPLE_INFO           sample;
 
-    val = get_filtered_distance();
+    get_filtered_distance( sample );
 
     button = button_debounced();
 
@@ -570,7 +576,7 @@ static bool           bands_ok = false;
         case ST_LOOP_CONFIG:
             // De la rutina de configuracion, sale cuando el usuario presiona el pulsador
             // y el valor que lee del sensor esta dentro del rango permitido.
-            if( calibracion( button, &dev_cfg, val ) ) {
+            if( calibracion( button, &dev_cfg, sample.filtered ) ) {
                 st_loop = ST_INIT_TIMER_CHANGE_BUZZER;
             }
         break;
@@ -590,6 +596,6 @@ static bool           bands_ok = false;
                 st_loop = ST_INIT_TIMER_CHANGE_BUZZER;
             }
 
-            control( &dev_cfg, val );
+            control( &dev_cfg, sample );
     }
 }
