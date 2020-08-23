@@ -168,7 +168,7 @@ static uint16_t   sensor_buff[ SAMPLES_BUFFER_SIZE ] = {0};
   if( sample.result && sample.raw == 0 ){
       sample.result = false;
   }
-  
+
   // La funcion comienza la lectura de un rango en forma no bloqueante.
   if ( sample.result ) ) {
     // Procesa el valor cuando distancia se obtuvo sin problemas.
@@ -215,7 +215,7 @@ static double output;
   if( sample.result && sample.raw == 0 ){
       sample.result = false;
   }
-  
+
   if ( sample.result ) {
     // Procesa el valor cuando la distancia se obtuvo sin problemas.
     if (!sensor.timeoutOccurred()) {
@@ -302,7 +302,7 @@ static uint32_t buzzer_timer = 0;
 uint8_t state;
 static uint32_t buzzer_time = TIME_DANGER_ON;         // Variable para controlar el ton/toff del buzzer.
 
-    state = get_state( &dev_cfg->points, sample.filtered );
+    state = get_state( &dev_cfg->points, sample.filtered, last_state );
 
     // Si el estado actual es peligro, resetea el timer de presentacion.
     if( state == ST_DANGER ) {
@@ -355,17 +355,33 @@ static uint32_t buzzer_time = TIME_DANGER_ON;         // Variable para controlar
     }
 }
 
+// Para salir de las franjas mas bajas, aplica una histerisis de media banda.
+bool hysteresis_off( bool state_lower, uint16_t val, uint16_t next_point )
+{
+    return ( state_lower && (val > (next_point + (DISTANCE_BAND / 2))) );
+}
+
 // Obtiene el estado comparando la distancia con las franjas configuradas.
-uint8_t get_state( DISTANCE_POINT* points, uint16_t val )
+uint8_t get_state( DISTANCE_POINT* points, uint16_t val, uint8_t last_state )
 {
 uint8_t state;
 
   if ( val < points->danger ) {
     state = ST_DANGER;
-  } else if (val < points->warning ) {
-    state = ST_WARNING;
+  } else if ( val < points->warning ) {
+    // Para salir de los estados aplica una histerisis de media franja.
+    if( hysteresis_off( (last_state == ST_DANGER), val, points->warning ) ){
+        state = last_state;
+    } else {
+        state = ST_WARNING;
+    }
   } else {
-    state = ST_SAFE;
+      // Para salir de los estados aplica una histerisis de media franja.
+      if( hysteresis_off( (last_state == ST_WARNING), val, points->safe ) ){
+          state = last_state;
+      } else {
+          state = ST_SAFE;
+      }
   }
 
   return state;
