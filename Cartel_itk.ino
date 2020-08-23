@@ -44,7 +44,9 @@
 #define ST_WARNING                      2       // El usuario tiene que tener precaucion.
 #define ST_SAFE                         3       // El usuario esta seguro.
 
-#define EWMA_ALPHA                      0.2     // Constante mayor que 0 y menor que 1.
+#define EWMA_ALPHA                      0.1    // Factor ALFA, tiene que ser mayor que 0 y menor que 1.
+                                                // A medida que es menor, mejora el filtrado pero demora
+                                                // la salida.
 #define SAMPLES_BUFFER_SIZE             4       // Tamaño del buffer de muestras de distancia.
 
 #define PIN_CFG_BUTTON                  2       // Pin del pulsador de configuracion.
@@ -67,6 +69,8 @@
 
 #define FILTER_EWMA                             // Selecciona el tipo de filtro que se va a usar para
                                                 // posprocesar la distancia del sensor.
+
+#define ENABLE_HYSTERESIS                       // Habilita la histerisis para salir del estado anterior.
 
 // Informacion de la muestra necesaria para implementar
 // un sistema de log con el proposito de estudiar el
@@ -222,6 +226,11 @@ static double output;
   if ( sample.result ) {
     // Procesa el valor cuando la distancia se obtuvo sin problemas.
     if (!sensor.timeoutOccurred()) {
+
+        // A medida que el valor es mayor a 0 el filtro tiene menos retardo, pero es
+        // mas propenso al ruido.
+        // Un alfa de 0.1, significa que el resultado será aproximadamente el
+        // promedio de las últimas 10 lecturas.
         output = EWMA_ALPHA * ( ((double)sample.raw) - output ) + output;
     } else {
         log_msg( F("Sensor error TIMEOUT") );
@@ -257,7 +266,7 @@ static uint32_t blink_time = TIME_CFG_BLUE;
     distance_ok = check_max_calibration_distance( new_distance );
     if ( !distance_ok ) {
       log_msg( F("La maxima distancia permitida es %d"), (MAX_SENSOR_DISTANCE -( 2 * DISTANCE_BAND) ));
-      
+
       // Fuerza un tick en estado de alarma.
       TIMER_START_MS( blink_timer );
       blink_led = true;
@@ -287,7 +296,7 @@ static uint32_t blink_time = TIME_CFG_BLUE;
     if( !blink_led ){
       set_led( CRGB::Black );
       buzzer_off();
-    // Si la distancia execede el rango permitido muestra el   
+    // Si la distancia execede el rango permitido muestra el
     }else if( !distance_ok ) {
       set_led( CRGB::Red );
       buzzer_on();
@@ -366,9 +375,13 @@ static uint32_t buzzer_time = TIME_DANGER_ON;         // Variable para controlar
 }
 
 // Para salir de las franjas mas bajas, aplica una histerisis de media banda.
-bool hysteresis_off( bool state_lower, uint16_t val, uint16_t next_point )
+bool hysteresis_off( uint16_t val, uint16_t next_point )
 {
-    return ( state_lower && (val > (next_point + (DISTANCE_BAND / 2))) );
+#ifdef ENABLE_HYSTERESIS
+  return ( val < (next_point - (DISTANCE_BAND / 2)) );
+#else
+  return false;
+#endif
 }
 
 // Obtiene el estado comparando la distancia con las franjas configuradas.
@@ -380,14 +393,14 @@ uint8_t state;
     state = ST_DANGER;
   } else if ( val < points->warning ) {
     // Para salir de los estados aplica una histerisis de media franja.
-    if( hysteresis_off( (last_state == ST_DANGER), val, points->warning ) ){
-        state = last_state;
-    } else {
-        state = ST_WARNING;
+    if( (last_state == ST_DANGER) && hysteresis_off( val, points->warning ) ){
+      state = last_state;
+    }else {
+      state = ST_WARNING;
     }
   } else {
       // Para salir de los estados aplica una histerisis de media franja.
-      if( hysteresis_off( (last_state == ST_WARNING), val, points->safe ) ){
+      if( (last_state == ST_WARNING) && hysteresis_off( val, points->safe ) ){
           state = last_state;
       } else {
           state = ST_SAFE;
