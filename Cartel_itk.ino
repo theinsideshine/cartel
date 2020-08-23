@@ -62,6 +62,9 @@
 #define TIME_DANGER_ON                  200     // Tiempo en mS que activa el buzzer cuando esta en la zona de peligro.
 #define TIME_DANGER_OFF                 2000    // Tiempo en mS que permanece apagado el buzzer.
 
+#define TIME_CFG_BLUE                   500     // Tiempo de parpadeo en calibracion cuando el valor es valido.
+#define TIME_CFG_RED                    300     // Tiempo de parpadeo en calibracion cuando el valor es invalido.
+
 #define FILTER_EWMA                             // Selecciona el tipo de filtro que se va a usar para
                                                 // posprocesar la distancia del sensor.
 
@@ -234,29 +237,30 @@ static double output;
 // Retorna true cuando es valida.
 bool check_max_calibration_distance( uint16_t val )
 {
-    return( (val < ( MAX_SENSOR_DISTANCE - ( 2 * DISTANCE_BAND) )) &&
-            (val > MIN_SENSOR_DISTANCE) );
+  return( (val < ( MAX_SENSOR_DISTANCE - ( 2 * DISTANCE_BAND) )) &&
+          (val > MIN_SENSOR_DISTANCE) );
 }
 
 // El operador debe selecionar el punto de peligro para que
 // el sistema calcule el resto de las franjas.
 bool calibracion( bool button, DEVICE_CONFIG* dev_cfg, uint16_t new_distance )
 {
-static uint8_t  blink_led = 0;
+static bool     blink_led = false;
+static bool     distance_ok = true;
 static uint32_t blink_timer = 0;
+static uint32_t blink_time = TIME_CFG_BLUE;
 
   // Presionando el pulsador graba la nueva franja en la eeprom
   // y pasa al estado de control.
   if ( button ) {
     // No acepta valores fuera de rango.
-    if ( !check_max_calibration_distance( new_distance ) ) {
+    distance_ok = check_max_calibration_distance( new_distance );
+    if ( !distance_ok ) {
       log_msg( F("La maxima distancia permitida es %d"), (MAX_SENSOR_DISTANCE -( 2 * DISTANCE_BAND) ));
-      set_led( CRGB::Red );
-      buzzer_on();
-
+      
       // Fuerza un tick en estado de alarma.
       TIMER_START_MS( blink_timer );
-      blink_led = false;
+      blink_led = true;
       button = false;
     } else {
       // La distancia medida queda en el medio de la franja de peligro.
@@ -273,18 +277,24 @@ static uint32_t blink_timer = 0;
     }
   } else {
     // Indica el modo de calibracion parpadeando en azul.
-    if( TIMER_IS_EXPIRED_MS( blink_timer, 500 ) ) {
+    if( TIMER_IS_EXPIRED_MS( blink_timer, blink_time ) ) {
         TIMER_START_MS( blink_timer );
 
         blink_led = !blink_led;
+        distance_ok = true;
     }
 
     if( !blink_led ){
       set_led( CRGB::Black );
       buzzer_off();
-    }else{
+    // Si la distancia execede el rango permitido muestra el   
+    }else if( !distance_ok ) {
+      set_led( CRGB::Red );
+      buzzer_on();
+      blink_time = TIME_CFG_RED;
+    } else {
+        blink_time = TIME_CFG_BLUE;
         set_led( CRGB::Blue );
-        buzzer_off();
         log_msg( F(" Presione para configurar el punto de peligro en %d mm"),
                  new_distance + (DISTANCE_BAND / 2) );
     }
