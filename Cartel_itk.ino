@@ -44,7 +44,7 @@
 #define ST_WARNING                      2       // El usuario tiene que tener precaucion.
 #define ST_SAFE                         3       // El usuario esta seguro.
 
-#define EWMA_ALPHA                      0.1    // Factor ALFA, tiene que ser mayor que 0 y menor que 1.
+#define EWMA_ALPHA                      0.05     // Factor ALFA, tiene que ser mayor que 0 y menor que 1.
                                                 // A medida que es menor, mejora el filtrado pero demora
                                                 // la salida.
 #define SAMPLES_BUFFER_SIZE             4       // Tamaño del buffer de muestras de distancia.
@@ -315,27 +315,31 @@ static uint32_t blink_time = TIME_CFG_BLUE;
 // Controla la distancia del usuario con respecto al sensor.
 void control( DEVICE_CONFIG* dev_cfg, SAMPLE_INFO& sample )
 {
-static uint8_t  last_state = 0;
-static uint32_t danger_timer = 0;
-static uint32_t buzzer_timer = 0;
 uint8_t state;
+static uint8_t  last_state = 0;
+static uint32_t blink_timer = 0;
+static uint32_t buzzer_timer = 0;
 static uint32_t buzzer_time = TIME_DANGER_ON;         // Variable para controlar el ton/toff del buzzer.
 
     state = get_state( &dev_cfg->points, sample.filtered, last_state );
 
-    // Si el estado actual es peligro, resetea el timer de presentacion.
-    if( state == ST_DANGER ) {
-        TIMER_START_MS( danger_timer );
-    // Si el anterior fue peligro, pero el actual no, y el timer no expiro
-    // entonces continua en estado de peligro.
-    } else if( (last_state == ST_DANGER) && !TIMER_IS_EXPIRED_MS( danger_timer, 1000 ) ) {
+    // Mantiene el estado anterior cuando el actual es menos peligroso que el
+    // actual y no expiro el temporizando.
+    if ( (state > last_state) && !TIMER_IS_EXPIRED_MS( blink_timer, 1000 ) ) {
         state = last_state;
-    // Cuando sale de la condicion de peligro, resetea el buzzer y el temporizador.
     } else {
+        // Cuando el estado anterior es igual al actual,
+        // resetea el temporizador de iluminacion.
+        if( state == last_state ) {
+            TIMER_START_MS( blink_timer );
+        }
+    }
+
+    // Apaga el buzzer cuando el estado no es peligro.
+    if (state != ST_DANGER) {
         buzzer_off();
         buzzer_time = TIME_DANGER_ON;
         TIMER_START_MS( buzzer_timer );
-        TIMER_START_MS( danger_timer );
     }
 
     switch( state ) {
@@ -529,7 +533,7 @@ void setup() {
   FastLED.addLeds<WS2812B, DATA_PIN, GRB>(leds, NUM_LEDS);
   Serial.begin(115200);
 
-  log_msg( F("Cartel distanciamiento Covid-19 - version 1.0.0") );
+  log_msg( F("Cartel distanciamiento Covid-19 - version 1.0.1") );
   log_msg( F("Intelektron SA - 2020") );
 
   Wire.begin();
