@@ -36,7 +36,8 @@ uint8_t magic_number;
         set_color_warning( COLOR_WARNING_DEFAULT );
         set_color_safe( COLOR_SAFE_DEFAULT );
         set_ewma_alpha( EWMA_ALPHA );
-
+        set_buzzer_ton( TIME_BUZZER_ON );
+        set_buzzer_toff( TIME_BUZZER_OFF );
     }else {
         EEPROM.get( EEPROM_ADDRESS_SAFE, safe );
         EEPROM.get( EEPROM_ADDRESS_WARNING, warning );
@@ -50,6 +51,8 @@ uint8_t magic_number;
         EEPROM.get( EEPROM_ADDRESS_COLOR_SAFE, color_safe);
 
         EEPROM.get( EEPROM_ADDRESS_EWMA_ALPHA, ewma_alpha );
+        EEPROM.get( EEPROM_ADDRESS_BUZZER_TON, buzzer_ton );
+        EEPROM.get( EEPROM_ADDRESS_BUZZER_TOFF, buzzer_toff );
     }
 }
 
@@ -152,6 +155,28 @@ void CConfig::set_ewma_alpha( double val )
     EEPROM.put( EEPROM_ADDRESS_EWMA_ALPHA, ewma_alpha );
 }
 
+uint32_t CConfig::get_buzzer_ton( void )
+{
+    return buzzer_ton;
+}
+
+void CConfig::set_buzzer_ton( uint32_t val )
+{
+    buzzer_ton = val;
+    EEPROM.put( EEPROM_ADDRESS_BUZZER_TON, buzzer_ton );
+}
+
+uint32_t CConfig::get_buzzer_toff( void )
+{
+    return buzzer_toff;
+}
+
+void CConfig::set_buzzer_toff( uint32_t val )
+{
+    buzzer_toff = val;
+    EEPROM.put( EEPROM_ADDRESS_BUZZER_TOFF, buzzer_toff );
+}
+
 // Lee por el puerto serie parametros de configuracion en formato json.
 // log_control:0=desactivado,1=estandar,2=arduino plotter
 // buzzer:false/true.           activa el buzzer
@@ -162,6 +187,8 @@ void CConfig::set_ewma_alpha( double val )
 // color_warning:0 a 0xFFFFFFF  configura el color para precaucion.
 // color_safe: 0 a 0xFFFFFFFF   configura el color para seguro.
 // ewma_alpha: 0 a 1            configura la constante alpha del filtro exponencial.
+// buzzer_ton: 0 a 0xFFFFFFFF   configura el tiempo que emite sonido en mS.
+// buzzer_toff: 0 a 0xFFFFFFFF   configura el tiempo que permanece apagado en mS.
 void CConfig::host_cmd( void )
 {
     if ( Serial.available() ){
@@ -211,6 +238,16 @@ void CConfig::host_cmd( void )
             if ( doc.containsKey("ewma_alpha") ) {
                 set_ewma_alpha( doc["ewma_alpha"] );
                 Serial.println( get_ewma_alpha() );
+            }
+
+            if ( doc.containsKey("buzzer_ton") ) {
+                set_buzzer_ton( doc["buzzer_ton"] );
+                Serial.println( get_buzzer_ton() );
+            }
+
+            if ( doc.containsKey("buzzer_toff") ) {
+                set_buzzer_toff( doc["buzzer_toff"] );
+                Serial.println( get_buzzer_toff() );
             }
         }
     }

@@ -31,6 +31,8 @@
 #define EWMA_ALPHA                      0.05     // Factor ALFA, tiene que ser mayor que 0 y menor que 1.
                                                 // A medida que es menor, mejora el filtrado pero demora
                                                 // la salida.
+#define TIME_BUZZER_ON                  200     // Tiempo en mS que activa el buzzer cuando esta en la zona de peligro.
+#define TIME_BUZZER_OFF                 2000    // Tiempo en mS que permanece apagado el buzzer.
 
 // Mapa de direcciones de los campos de configuracion en la EEPROM.
 #define EEPROM_ADDRESS_MAGIC_NUMBER     0
@@ -43,6 +45,8 @@
 #define EEPROM_ADDRESS_COLOR_WARNING    (EEPROM_ADDRESS_COLOR_DANGER + sizeof(uint32_t) )
 #define EEPROM_ADDRESS_COLOR_SAFE       (EEPROM_ADDRESS_COLOR_WARNING + sizeof(uint32_t) )
 #define EEPROM_ADDRESS_EWMA_ALPHA       (EEPROM_ADDRESS_COLOR_SAFE + sizeof(uint32_t))
+#define EEPROM_ADDRESS_BUZZER_TON       (EEPROM_ADDRESS_EWMA_ALPHA + sizeof(uint32_t))
+#define EEPROM_ADDRESS_BUZZER_TOFF      (EEPROM_ADDRESS_BUZZER_TON + sizeof(uint32_t))
 
 class CConfig
 {
@@ -71,6 +75,11 @@ class CConfig
     double get_ewma_alpha( void );
     void set_ewma_alpha( double );
 
+    uint32_t get_buzzer_ton( void );
+    void set_buzzer_ton( uint32_t );
+    uint32_t get_buzzer_toff( void );
+    void set_buzzer_toff( uint32_t );
+
     void host_cmd( void );
   private:
     uint8_t log_control;        // 0 = log de informacion de control desactivada.
@@ -85,6 +94,9 @@ class CConfig
     uint32_t color_safe;
 
     double ewma_alpha;          // Constante alpha del filtro exponencial.
+
+    uint32_t buzzer_ton;        // Tiempo en mS que emite.
+    uint32_t buzzer_toff;       // Tiempo en mS que esta apagado.
 };
 
 #endif // CONFIG_H

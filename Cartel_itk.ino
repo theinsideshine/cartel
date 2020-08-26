@@ -53,9 +53,6 @@
 
 #define LOG_CTRL_INFO_TIMEOUT           100     // Logea la informacion de control cada 100 mS.
 
-#define TIME_DANGER_ON                  200     // Tiempo en mS que activa el buzzer cuando esta en la zona de peligro.
-#define TIME_DANGER_OFF                 2000    // Tiempo en mS que permanece apagado el buzzer.
-
 #define TIME_CFG_BLUE                   500     // Tiempo de parpadeo en calibracion cuando el valor es valido.
 #define TIME_CFG_RED                    300     // Tiempo de parpadeo en calibracion cuando el valor es invalido.
 
@@ -273,7 +270,7 @@ uint8_t state;
 static uint8_t  last_state = 0;
 static CTimer   Timer_blink;
 static CTimer   Timer_buzzer;
-static uint32_t buzzer_time = TIME_DANGER_ON;         // Variable para controlar el ton/toff del buzzer.
+static uint32_t buzzer_time = Config.get_buzzer_ton();         // Variable para controlar el ton/toff del buzzer.
 
     state = get_state( sample.filtered, last_state );
 
@@ -292,7 +289,7 @@ static uint32_t buzzer_time = TIME_DANGER_ON;         // Variable para controlar
     // Apaga el buzzer cuando el estado no es peligro.
     if (state != ST_DANGER) {
         Buzzer.off();
-        buzzer_time = TIME_DANGER_ON;
+        buzzer_time = Config.get_buzzer_ton();
         Timer_buzzer.start();
     }
 
@@ -308,7 +305,7 @@ static uint32_t buzzer_time = TIME_DANGER_ON;         // Variable para controlar
             if ( Config.get_buzzer() ) {
               if( Timer_buzzer.expired( buzzer_time ) ) {
                   // La pausa es el doble del sonido.
-                  buzzer_time = (Buzzer.tgl() ? TIME_DANGER_ON : TIME_DANGER_OFF);
+                  buzzer_time = (Buzzer.tgl() ? Config.get_buzzer_ton() : Config.get_buzzer_toff());
                   Timer_buzzer.start();
               }
             }else{
