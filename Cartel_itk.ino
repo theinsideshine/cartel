@@ -28,16 +28,11 @@
 #include <Wire.h>
 #include <VL53L0X.h>
 #include <FastLED.h>
-#include <EEPROM.h>
 
-#define EEPRON_ADDRESS_CONFIG           4       // Direccion en la epprom donde se almacena la configuracion.
+#include "log.h"
+#include "cfg.h"
+
 #define NUM_LEDS                        16      // Cantidad de led
-
-#define MIN_SENSOR_DISTANCE             600     // Minima distancia de lectura en mm.
-#define MAX_SENSOR_DISTANCE             2000    // Distancia maxima a la que puede leer el sensor.
-#define DISTANCE_BAND                   200     // Tamaño de la franja en mm.
-#define DANGER_DEFAULT                  800     // Distancia de peligro por defecto en mm.
-#define BUZZER_DEFAULT                  1       // El buzzer esta activado.
 
 #define ST_UNKNOW                       0       // Estado desconocido.
 #define ST_DANGER                       1       // El usuario esta en peligro.
@@ -78,23 +73,8 @@
 typedef struct tag_SAMPLE_INFO {
   bool      result;                 // TRUE se obtuvo muestra valida.
   uint16_t  raw;                    // Valor en crudo.
-  uint16_t filtered;                // Valor filtrado.
+  uint16_t  filtered;               // Valor filtrado.
 } SAMPLE_INFO;
-
-// Contiene la informacion de los puntos para definir,
-// la franja de precaucion, peligro y seguro.
-typedef struct tag_DISTANCE_POINT {
-  uint16_t danger;
-  uint16_t warning;
-  uint16_t safe;
-} DISTANCE_POINT;
-
-// Contiene la informacion de configuracion del dispositivo.
-typedef struct tag_DEVICE_CONFIG {
-  bool              factory_reset;
-  DISTANCE_POINT    points;
-  bool              buzzer_on;
-} DEVICE_CONFIG;
 
 // WS2812B -> Pin de Control.
 #define DATA_PIN 8
@@ -102,6 +82,9 @@ typedef struct tag_DEVICE_CONFIG {
 CRGB leds[NUM_LEDS];
 
 VL53L0X sensor;
+
+Clog Log;
+CConfig Config;
 
 #define LONG_RANGE
 
@@ -116,27 +99,6 @@ VL53L0X sensor;
 // del arduino en milisegundos.
 #define TIMER_IS_EXPIRED_MS( tmr, us ) ((millis() - tmr) > us)
 #define TIMER_START_MS( tmr ) (tmr = millis())
-
-// Muestra informacion de logueo por el puerto serie, precedidos
-// por los milisegundos desde el reset.
-// Implementa un wrapper de la funcion print de C para usar string
-// formateados, ejemplo: ("distancia %d", var)
-// NOTA: para ahorrar memoria RAM usa la version vsnprintf_P para que los
-//       string se almacenen en la flash. Hay que anteponer el modificador
-//       F(), ejemplo: log_msg( F("valor = %d"), var );
-static void log_msg( const __FlashStringHelper *fmt, ... )
-{
-char buf[ 128 ];
-va_list args;
-
-    va_start(args, fmt);
-    vsnprintf_P(buf, sizeof(buf), (const char *)fmt, args); // progmem for AVR
-    va_end(args);
-
-    Serial.print( millis() );
-    Serial.print( " " );
-    Serial.println( buf );
-}
 
 // Retorna true cuando el operador presiono el pulsador de programacion.
 // Aplica un mecanismo de antirebote.
@@ -201,7 +163,7 @@ static uint16_t   sensor_buff[ SAMPLES_BUFFER_SIZE ] = {0};
           last_valid_val = sample.raw;
         }
     } else {
-        log_msg( F("Sensor error TIMEOUT") );
+        Log.msg( F("Sensor error TIMEOUT") );
     }
   }
 
@@ -233,7 +195,7 @@ static double output;
         // promedio de las últimas 10 lecturas.
         output = EWMA_ALPHA * ( ((double)sample.raw) - output ) + output;
     } else {
-        log_msg( F("Sensor error TIMEOUT") );
+        Log.msg( F("Sensor error TIMEOUT") );
     }
   }
 
@@ -252,7 +214,7 @@ bool check_max_calibration_distance( uint16_t val )
 
 // El operador debe selecionar el punto de peligro para que
 // el sistema calcule el resto de las franjas.
-bool calibracion( bool button, DEVICE_CONFIG* dev_cfg, uint16_t new_distance )
+bool calibracion( bool button, uint16_t new_distance )
 {
 static bool     blink_led = false;
 static bool     distance_ok = true;
@@ -265,7 +227,7 @@ static uint32_t blink_time = TIME_CFG_BLUE;
     // No acepta valores fuera de rango.
     distance_ok = check_max_calibration_distance( new_distance );
     if ( !distance_ok ) {
-      log_msg( F("La maxima distancia permitida es %d"), (MAX_SENSOR_DISTANCE -( 2 * DISTANCE_BAND) ));
+      Log.msg( F("La maxima distancia permitida es %d"), (MAX_SENSOR_DISTANCE -( 2 * DISTANCE_BAND) ));
 
       // Fuerza un tick en estado de alarma.
       TIMER_START_MS( blink_timer );
@@ -273,16 +235,13 @@ static uint32_t blink_time = TIME_CFG_BLUE;
       button = false;
     } else {
       // La distancia medida queda en el medio de la franja de peligro.
-      dev_cfg->points.danger = new_distance + (DISTANCE_BAND / 2);
-      dev_cfg->points.warning = dev_cfg->points.danger + DISTANCE_BAND;
-      dev_cfg->points.safe = dev_cfg->points.danger + ( 2 * DISTANCE_BAND );
+      new_distance += (DISTANCE_BAND / 2);
+      Config.set_danger( new_distance );
+      Config.set_warning( new_distance + DISTANCE_BAND );
+      Config.set_safe( new_distance + ( 2 * DISTANCE_BAND ) );
 
-      log_msg( F("Puntos seguro = %d, precaucion = %d, peligro = %d"),
-              dev_cfg->points.safe,
-              dev_cfg->points.warning,
-              dev_cfg->points.danger);
-
-      config_write( dev_cfg );
+      Log.msg( F("Nuevos puntos -> seguro = %d, precaucion = %d, peligro = %d"),
+              Config.get_safe(), Config.get_warning(), Config.get_danger());
     }
   } else {
     // Indica el modo de calibracion parpadeando en azul.
@@ -304,7 +263,7 @@ static uint32_t blink_time = TIME_CFG_BLUE;
     } else {
         blink_time = TIME_CFG_BLUE;
         set_led( CRGB::Blue );
-        log_msg( F(" Presione para configurar el punto de peligro en %d mm"),
+        Log.msg( F(" Presione para configurar el punto de peligro en %d mm"),
                  new_distance + (DISTANCE_BAND / 2) );
     }
   }
@@ -313,7 +272,7 @@ static uint32_t blink_time = TIME_CFG_BLUE;
 }
 
 // Controla la distancia del usuario con respecto al sensor.
-void control( DEVICE_CONFIG* dev_cfg, SAMPLE_INFO& sample )
+void control( SAMPLE_INFO& sample )
 {
 uint8_t state;
 static uint8_t  last_state = 0;
@@ -321,7 +280,7 @@ static uint32_t blink_timer = 0;
 static uint32_t buzzer_timer = 0;
 static uint32_t buzzer_time = TIME_DANGER_ON;         // Variable para controlar el ton/toff del buzzer.
 
-    state = get_state( &dev_cfg->points, sample.filtered, last_state );
+    state = get_state( sample.filtered, last_state );
 
     // Mantiene el estado anterior cuando el actual es menos peligroso que el
     // actual y no expiro el temporizando.
@@ -351,7 +310,7 @@ static uint32_t buzzer_time = TIME_DANGER_ON;         // Variable para controlar
             set_led( CRGB::Red );
 
             // Si el buzzer esta activado, lo prende y apaga en forma intermitente.
-            if(dev_cfg->buzzer_on) {
+            if ( Config.get_buzzer() ) {
               if( TIMER_IS_EXPIRED_MS( buzzer_timer, buzzer_time ) ) {
                   // La pausa es el doble del sonido.
                   buzzer_time = (buzzer_toggle() ? TIME_DANGER_ON : TIME_DANGER_OFF);
@@ -370,11 +329,11 @@ static uint32_t buzzer_time = TIME_DANGER_ON;         // Variable para controlar
 
     last_state = state;
 
-    // Para evitar sobrecargar la unidad serie, logea la informacion
+    // Para evitar sobrecargar la unidad serie, Logea la informacion
     // de control cada vez que hay una muestra nueva.
     if( sample.result ) {
-        log_msg( F("raw = %d distancia = %d estado = %d peligro = %d"),
-                 sample.raw, sample.filtered, state, dev_cfg->points.danger );
+        Log.msg( F("raw = %d distancia = %d estado = %d peligro = %d"),
+                 sample.raw, sample.filtered, state, Config.get_danger() );
     }
 }
 
@@ -389,22 +348,22 @@ bool hysteresis_off( uint16_t val, uint16_t next_point )
 }
 
 // Obtiene el estado comparando la distancia con las franjas configuradas.
-uint8_t get_state( DISTANCE_POINT* points, uint16_t val, uint8_t last_state )
+uint8_t get_state( uint16_t val, uint8_t last_state )
 {
 uint8_t state;
 
-  if ( val < points->danger ) {
+  if ( val < Config.get_danger() ) {
     state = ST_DANGER;
-  } else if ( val < points->warning ) {
+  } else if ( val < Config.get_warning() ) {
     // Para salir de los estados aplica una histerisis de media franja.
-    if( (last_state == ST_DANGER) && hysteresis_off( val, points->warning ) ){
+    if( (last_state == ST_DANGER) && hysteresis_off( val, Config.get_warning() ) ){
       state = last_state;
     }else {
       state = ST_WARNING;
     }
   } else {
       // Para salir de los estados aplica una histerisis de media franja.
-      if( (last_state == ST_WARNING) && hysteresis_off( val, points->safe ) ){
+      if( (last_state == ST_WARNING) && hysteresis_off( val, Config.get_safe() ) ){
           state = last_state;
       } else {
           state = ST_SAFE;
@@ -414,69 +373,12 @@ uint8_t state;
   return state;
 }
 
-// Lee los parametros de configuracion de la eeprom.
-void config_read( DEVICE_CONFIG* dev_cfg )
-{
-DEVICE_CONFIG local;
-
-  EEPROM.get( EEPRON_ADDRESS_CONFIG, local );
-
-  dev_cfg->factory_reset = local.factory_reset;
-  dev_cfg->points.safe = local.points.safe;
-  dev_cfg->points.warning = local.points.warning;
-  dev_cfg->points.danger = local.points.danger;
-  dev_cfg->buzzer_on = local.buzzer_on;
-
-  // Carga los parametros de fabrica, cuando detecta que la eeprom
-  // no fue inicializada.
-  if( dev_cfg->factory_reset != false ) {
-    config_load_default_values( dev_cfg );
-
-    config_write( dev_cfg );
-  }
-
-  log_msg( F("Leer config: seguro = %d, precaucion = %d, peligro = %d, buzzer = %d"),
-           dev_cfg->points.safe, dev_cfg->points.warning,
-           dev_cfg->points.danger, dev_cfg->buzzer_on );
-}
-
-// Carga los parametros de configuracion por defecto.
-void config_load_default_values( DEVICE_CONFIG* dev_cfg )
-{
-  dev_cfg->factory_reset    = false;
-  dev_cfg->points.safe      = DANGER_DEFAULT + (DISTANCE_BAND * 2);
-  dev_cfg->points.warning   = DANGER_DEFAULT + DISTANCE_BAND;
-  dev_cfg->points.danger    = DANGER_DEFAULT;
-  dev_cfg->buzzer_on        = BUZZER_DEFAULT;
-
-  log_msg( F("Valores por defecto config: seguro = %d, precaucion = %d, peligro = %d, buzzer = %d"),
-           dev_cfg->points.safe, dev_cfg->points.warning,
-           dev_cfg->points.danger, dev_cfg->buzzer_on );
-}
-
 // Invierte la habilitacion del buzzer, y lo almacena en la eeprom.
-void config_buzzer_on_tgl( DEVICE_CONFIG* dev_cfg )
+void config_buzzer_on_tgl( void )
 {
-  dev_cfg->buzzer_on = !dev_cfg->buzzer_on;
-  config_write( dev_cfg );
+  Config.set_buzzer( !Config.get_buzzer() );
 
-  log_msg( F("Habilitacion buzzer = %d"), dev_cfg->buzzer_on );
-}
-
-// Graba los parametros de configuracion en la eeprom.
-void config_write( DEVICE_CONFIG* dev_cfg )
-{
-DEVICE_CONFIG local;
-
-  local.factory_reset = dev_cfg->factory_reset;
-  local.points.safe = dev_cfg->points.safe;
-  local.points.warning = dev_cfg->points.warning;
-  local.points.danger = dev_cfg->points.danger;
-  local.buzzer_on = dev_cfg->buzzer_on;
-
-  EEPROM.put( EEPRON_ADDRESS_CONFIG, local );
-
-  log_msg( F("Grabando configuracion"), dev_cfg->buzzer_on );
+  Log.msg( F("Habilitacion buzzer = %d"), Config.get_buzzer() );
 }
 
 // Actualiza el display de leds inteligentes, cuando el
@@ -531,17 +433,18 @@ void setup() {
   digitalWrite(PIN_BUZZER, HIGH);
 
   FastLED.addLeds<WS2812B, DATA_PIN, GRB>(leds, NUM_LEDS);
-  Serial.begin(115200);
 
-  log_msg( F("Cartel distanciamiento Covid-19 - version 1.0.1") );
-  log_msg( F("Intelektron SA - 2020") );
+  Log.init( true );
+
+  Log.msg( F("Cartel distanciamiento Covid-19 - version 1.0.1") );
+  Log.msg( F("Intelektron SA - 2020") );
 
   Wire.begin();
   Wire.setClock(400000);
   sensor.setTimeout(500);
 
   if ( !sensor.init() ){
-    log_msg( F("Fallo al Inicializar el Sensor VL53L0X") );
+    Log.msg( F("Fallo al Inicializar el Sensor VL53L0X") );
     while (1) {
       buzzer_toggle();
 
@@ -569,15 +472,15 @@ void setup() {
   sensor.setMeasurementTimingBudget(200000);
 #endif
 
-  log_msg( F("Sistema inicializado correctamente") );
+  Log.msg( F("Sistema inicializado correctamente") );
 }
 
 // Verifica que las bandas sean validas.
-bool check_bands( DISTANCE_POINT* points )
+bool check_bands( void )
 {
-    if( (points->danger > MIN_SENSOR_DISTANCE) && (points->danger < MAX_SENSOR_DISTANCE) ){
-        return ( ((points->warning - DISTANCE_BAND) == points->danger) &&
-                 ((points->safe - DISTANCE_BAND) == points->warning) );
+    if( (Config.get_danger() > MIN_SENSOR_DISTANCE) && (Config.get_danger() < MAX_SENSOR_DISTANCE) ){
+        return ( ((Config.get_warning() - DISTANCE_BAND) == Config.get_danger()) &&
+                 ((Config.get_safe() - DISTANCE_BAND) == Config.get_warning()) );
     }
 
     return false;
@@ -588,7 +491,6 @@ void loop()
 {
 bool                  button;
 
-static DEVICE_CONFIG  dev_cfg;
 static uint32_t       timer = 0;
 static uint8_t        st_loop = ST_LOOP_INIT;
 static bool           bands_ok = false;
@@ -605,10 +507,12 @@ SAMPLE_INFO           sample;
             st_loop = ST_LOOP_TIMER_CFG;
             TIMER_START_MS( timer );
 
-            config_read( &dev_cfg );
+            Log.msg( F("Puntos -> seguro = %d, precaucion = %d, peligro = %d, buzzer = %d"),
+                     Config.get_safe(), Config.get_warning(),
+                     Config.get_danger(), Config.get_buzzer() );
 
             // Si hay un error en muestra el color rosado.
-            if( (bands_ok = check_bands( &dev_cfg.points )) ) {
+            if( (bands_ok = check_bands()) ) {
                 set_led( CRGB::Blue );
             }else {
                 set_led( CRGB::Pink );
@@ -621,7 +525,7 @@ SAMPLE_INFO           sample;
             if ( button ) {
               set_led( CRGB::Pink );
 
-              log_msg( F("Suelte el pulsador para continuar con la calibracion.") );
+              Log.msg( F("Suelte el pulsador para continuar con la calibracion.") );
 
               st_loop = ST_LOOP_CONFIG;
             // Si las bandas son invalidas se queda en configuracion.
@@ -633,7 +537,7 @@ SAMPLE_INFO           sample;
         case ST_LOOP_CONFIG:
             // De la rutina de configuracion, sale cuando el usuario presiona el pulsador
             // y el valor que lee del sensor esta dentro del rango permitido.
-            if( calibracion( button, &dev_cfg, sample.filtered ) ) {
+            if( calibracion( button, sample.filtered ) ) {
                 st_loop = ST_INIT_TIMER_CHANGE_BUZZER;
             }
         break;
@@ -649,10 +553,10 @@ SAMPLE_INFO           sample;
             // Si el tiempo expiro, cada vez que se presiona el pulsado, invierte la
             // habilitacion del buzzer.
             if( TIMER_IS_EXPIRED_MS( timer, 1000 ) && button ){
-                config_buzzer_on_tgl( &dev_cfg );
+                config_buzzer_on_tgl();
                 st_loop = ST_INIT_TIMER_CHANGE_BUZZER;
             }
 
-            control( &dev_cfg, sample );
+            control( sample );
     }
 }
