@@ -31,6 +31,7 @@
 
 #include "log.h"
 #include "cfg.h"
+#include "buzzer.h"
 
 #define NUM_LEDS                        16      // Cantidad de led
 
@@ -42,7 +43,6 @@
 #define SAMPLES_BUFFER_SIZE             4       // Tamaño del buffer de muestras de distancia.
 
 #define PIN_CFG_BUTTON                  2       // Pin del pulsador de configuracion.
-#define PIN_BUZZER                      6       // Pin del buzzer.
 
 #define ST_LOOP_INIT                    0       // Inicializa el programa (carga la configuracion).
 #define ST_LOOP_TIMER_CFG               1       // Temporizador de configuracion.
@@ -82,6 +82,7 @@ VL53L0X sensor;
 
 Clog Log;
 CConfig Config;
+CBuzzer Buzzer;
 
 #define LONG_RANGE
 
@@ -251,11 +252,11 @@ static uint32_t blink_time = TIME_CFG_BLUE;
 
     if( !blink_led ){
       set_led( CRGB::Black );
-      buzzer_off();
+      Buzzer.off();
     // Si la distancia execede el rango permitido muestra el
     }else if( !distance_ok ) {
       set_led( CRGB::Red );
-      buzzer_on();
+      Buzzer.on();
       blink_time = TIME_CFG_RED;
     } else {
         blink_time = TIME_CFG_BLUE;
@@ -293,7 +294,7 @@ static uint32_t buzzer_time = TIME_DANGER_ON;         // Variable para controlar
 
     // Apaga el buzzer cuando el estado no es peligro.
     if (state != ST_DANGER) {
-        buzzer_off();
+        Buzzer.off();
         buzzer_time = TIME_DANGER_ON;
         TIMER_START_MS( buzzer_timer );
     }
@@ -310,11 +311,11 @@ static uint32_t buzzer_time = TIME_DANGER_ON;         // Variable para controlar
             if ( Config.get_buzzer() ) {
               if( TIMER_IS_EXPIRED_MS( buzzer_timer, buzzer_time ) ) {
                   // La pausa es el doble del sonido.
-                  buzzer_time = (buzzer_toggle() ? TIME_DANGER_ON : TIME_DANGER_OFF);
+                  buzzer_time = (Buzzer.tgl() ? TIME_DANGER_ON : TIME_DANGER_OFF);
                   TIMER_START_MS( buzzer_timer );
               }
             }else{
-              buzzer_off();
+              Buzzer.off();
             }
         break;
 
@@ -394,39 +395,10 @@ static CRGB last_color = CRGB::Black;
   }
 }
 
-// Activa el buzzer.
-void buzzer_on( void )
-{
-    digitalWrite(PIN_BUZZER, LOW);
-}
-
-// Apaga el buzzer.
-void buzzer_off( void )
-{
-    digitalWrite(PIN_BUZZER, HIGH);
-}
-
-// Cambia de estado el buzzer.
-// Retorna el estado anterior.
-bool buzzer_toggle( void )
-{
-bool state = (digitalRead( PIN_BUZZER ) == LOW);
-
-    if (state){
-        buzzer_off();
-    }else{
-        buzzer_on();
-    }
-
-    return !state;
-}
-
 // Inicializa los perfericos del cartel.
 void setup() {
   pinMode(PIN_CFG_BUTTON, INPUT_PULLUP);
   pinMode(LED_BUILTIN, OUTPUT);
-  pinMode(PIN_BUZZER, OUTPUT);
-  digitalWrite(PIN_BUZZER, HIGH);
 
   FastLED.addLeds<WS2812B, DATA_PIN, GRB>(leds, NUM_LEDS);
 
@@ -439,10 +411,12 @@ void setup() {
   Wire.setClock(400000);
   sensor.setTimeout(500);
 
+  Buzzer.init();
+  
   if ( !sensor.init() ){
     Log.msg( F("Fallo al Inicializar el Sensor VL53L0X") );
     while (1) {
-      buzzer_toggle();
+      Buzzer.tgl();
 
       set_led( CRGB::Blue );
       delay(1000);
