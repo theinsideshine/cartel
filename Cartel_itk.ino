@@ -39,9 +39,6 @@
 #define ST_WARNING                      2       // El usuario tiene que tener precaucion.
 #define ST_SAFE                         3       // El usuario esta seguro.
 
-#define EWMA_ALPHA                      0.05     // Factor ALFA, tiene que ser mayor que 0 y menor que 1.
-                                                // A medida que es menor, mejora el filtrado pero demora
-                                                // la salida.
 #define SAMPLES_BUFFER_SIZE             4       // Tamaño del buffer de muestras de distancia.
 
 #define PIN_CFG_BUTTON                  2       // Pin del pulsador de configuracion.
@@ -193,7 +190,7 @@ static double output;
         // mas propenso al ruido.
         // Un alfa de 0.1, significa que el resultado será aproximadamente el
         // promedio de las últimas 10 lecturas.
-        output = EWMA_ALPHA * ( ((double)sample.raw) - output ) + output;
+        output = (Config.get_ewma_alpha() * ( ((double)sample.raw) - output )) + output;
     } else {
         Log.msg( F("Sensor error TIMEOUT") );
     }

@@ -23,7 +23,7 @@ uint8_t magic_number;
     EEPROM.get( EEPROM_ADDRESS_MAGIC_NUMBER, magic_number );
 
     if( magic_number != MAGIC_NUMBER ){
-        magic_number     = MAGIC_NUMBER;
+        magic_number = MAGIC_NUMBER;
         EEPROM.put( EEPROM_ADDRESS_MAGIC_NUMBER, magic_number );
 
         set_safe( DANGER_DEFAULT + (DISTANCE_BAND * 2) );
@@ -35,6 +35,7 @@ uint8_t magic_number;
         set_color_danger( COLOR_DANGER_DEFAULT );
         set_color_warning( COLOR_WARNING_DEFAULT );
         set_color_safe( COLOR_SAFE_DEFAULT );
+        set_ewma_alpha( EWMA_ALPHA );
 
     }else {
         EEPROM.get( EEPROM_ADDRESS_SAFE, safe );
@@ -47,6 +48,8 @@ uint8_t magic_number;
         EEPROM.get( EEPROM_ADDRESS_COLOR_DANGER, color_danger );
         EEPROM.get( EEPROM_ADDRESS_COLOR_WARNING, color_warning );
         EEPROM.get( EEPROM_ADDRESS_COLOR_SAFE, color_safe);
+
+        EEPROM.get( EEPROM_ADDRESS_EWMA_ALPHA, ewma_alpha );
     }
 }
 
@@ -138,6 +141,17 @@ void CConfig::set_log_control( uint8_t enable )
     EEPROM.put( EEPROM_ADDRESS_LOG_CONTROL, log_control );
 }
 
+double CConfig::get_ewma_alpha( void )
+{
+    return ewma_alpha;
+}
+
+void CConfig::set_ewma_alpha( double val )
+{
+    ewma_alpha = val;
+    EEPROM.put( EEPROM_ADDRESS_EWMA_ALPHA, ewma_alpha );
+}
+
 // Lee por el puerto serie parametros de configuracion en formato json.
 // log_control:0=desactivado,1=estandar,2=arduino plotter
 // buzzer:false/true.           activa el buzzer
@@ -147,6 +161,7 @@ void CConfig::set_log_control( uint8_t enable )
 // color_danger:0 a 0xFFFFFFFF  configura el color para peligro.
 // color_warning:0 a 0xFFFFFFF  configura el color para precaucion.
 // color_safe: 0 a 0xFFFFFFFF   configura el color para seguro.
+// ewma_alpha: 0 a 1            configura la constante alpha del filtro exponencial.
 void CConfig::host_cmd( void )
 {
     if ( Serial.available() ){
@@ -191,6 +206,11 @@ void CConfig::host_cmd( void )
             if ( doc.containsKey("log_control") ) {
                 set_log_control( doc["log_control"] );
                 Serial.println( get_log_control() );
+            }
+
+            if ( doc.containsKey("ewma_alpha") ) {
+                set_ewma_alpha( doc["ewma_alpha"] );
+                Serial.println( get_ewma_alpha() );
             }
         }
     }

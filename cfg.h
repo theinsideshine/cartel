@@ -28,6 +28,10 @@
 #define COLOR_WARNING_DEFAULT           0x00FFFF00  // Color amarillo por defecto para la zona de precaucion.
 #define COLOR_SAFE_DEFAULT              0x0000FF00  // Color verde por defecto para la zona segura.
 
+#define EWMA_ALPHA                      0.05     // Factor ALFA, tiene que ser mayor que 0 y menor que 1.
+                                                // A medida que es menor, mejora el filtrado pero demora
+                                                // la salida.
+
 // Mapa de direcciones de los campos de configuracion en la EEPROM.
 #define EEPROM_ADDRESS_MAGIC_NUMBER     0
 #define EEPROM_ADDRESS_SAFE             (EEPROM_ADDRESS_MAGIC_NUMBER + sizeof(uint8_t))
@@ -37,7 +41,8 @@
 #define EEPROM_ADDRESS_LOG_CONTROL      (EEPROM_ADDRESS_BUZZER + sizeof(bool))
 #define EEPROM_ADDRESS_COLOR_DANGER     (EEPROM_ADDRESS_LOG_CONTROL + sizeof(uint8_t) )
 #define EEPROM_ADDRESS_COLOR_WARNING    (EEPROM_ADDRESS_COLOR_DANGER + sizeof(uint32_t) )
-#define EEPROM_ADDRESS_COLOR_SAFE       (EEPROM_ADDRESS_WARNING + sizeof(uint32_t) )
+#define EEPROM_ADDRESS_COLOR_SAFE       (EEPROM_ADDRESS_COLOR_WARNING + sizeof(uint32_t) )
+#define EEPROM_ADDRESS_EWMA_ALPHA       (EEPROM_ADDRESS_COLOR_SAFE + sizeof(uint32_t))
 
 class CConfig
 {
@@ -63,18 +68,23 @@ class CConfig
     uint32_t get_color_safe( void );
     void set_color_safe( uint32_t );
 
+    double get_ewma_alpha( void );
+    void set_ewma_alpha( double );
+
     void host_cmd( void );
   private:
-    uint8_t         log_control;      // 0 = log de informacion de control desactivada.
-    bool            buzzer_on;
+    uint8_t log_control;        // 0 = log de informacion de control desactivada.
+    bool    buzzer_on;
 
-    uint16_t danger;                  // Punto de peligro.
-    uint16_t warning;                 // Punto de precaucion.
-    uint16_t safe;                    // Punto de seguridad.
+    uint16_t danger;            // Punto de peligro.
+    uint16_t warning;           // Punto de precaucion.
+    uint16_t safe;              // Punto de seguridad.
 
     uint32_t color_danger;
     uint32_t color_warning;
     uint32_t color_safe;
+
+    double ewma_alpha;          // Constante alpha del filtro exponencial.
 };
 
 #endif // CONFIG_H
