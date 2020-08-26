@@ -32,6 +32,8 @@
 #include "log.h"
 #include "cfg.h"
 #include "buzzer.h"
+#include "timer.h"
+#include "button.h"
 
 #define NUM_LEDS                        16      // Cantidad de led
 
@@ -41,8 +43,6 @@
 #define ST_SAFE                         3       // El usuario esta seguro.
 
 #define SAMPLES_BUFFER_SIZE             4       // Tamaño del buffer de muestras de distancia.
-
-#define PIN_CFG_BUTTON                  2       // Pin del pulsador de configuracion.
 
 #define ST_LOOP_INIT                    0       // Inicializa el programa (carga la configuracion).
 #define ST_LOOP_TIMER_CFG               1       // Temporizador de configuracion.
@@ -83,6 +83,7 @@ VL53L0X sensor;
 Clog Log;
 CConfig Config;
 CBuzzer Buzzer;
+CButton Button;
 
 #define LONG_RANGE
 
@@ -93,26 +94,21 @@ CBuzzer Buzzer;
 #define HIGH_SPEED
 //#define HIGH_ACCURACY
 
-// Funciones para usar el temporizador no bloqueante
-// del arduino en milisegundos.
-#define TIMER_IS_EXPIRED_MS( tmr, us ) ((millis() - tmr) > us)
-#define TIMER_START_MS( tmr ) (tmr = millis())
-
 // Retorna true cuando el operador presiono el pulsador de programacion.
 // Aplica un mecanismo de antirebote.
 static bool button_debounced( void )
 {
-static uint32_t timer_debounce = 0;
+static CTimer Debounce;
 
   bool val = (digitalRead( PIN_CFG_BUTTON ) == LOW);
 
   // Despues que se presiona el pulsador debe permanecer 500 mS liberado.
   if( val ) {
-    if( !TIMER_IS_EXPIRED_MS(timer_debounce, 500) ){
+    if( Debounce.expired( 500 ) ){
       val = false;
     }
 
-    TIMER_START_MS( timer_debounce );
+    Debounce.start();
   }
 
   return val;
@@ -212,25 +208,24 @@ bool check_max_calibration_distance( uint16_t val )
 
 // El operador debe selecionar el punto de peligro para que
 // el sistema calcule el resto de las franjas.
-bool calibracion( bool button, uint16_t new_distance )
+bool calibracion( uint16_t new_distance )
 {
 static bool     blink_led = false;
 static bool     distance_ok = true;
-static uint32_t blink_timer = 0;
+static CTimer   Timer;
 static uint32_t blink_time = TIME_CFG_BLUE;
 
   // Presionando el pulsador graba la nueva franja en la eeprom
   // y pasa al estado de control.
-  if ( button ) {
+  if ( Button.is_pressed() ) {
     // No acepta valores fuera de rango.
     distance_ok = check_max_calibration_distance( new_distance );
     if ( !distance_ok ) {
       Log.msg( F("La maxima distancia permitida es %d"), (MAX_SENSOR_DISTANCE -( 2 * DISTANCE_BAND) ));
 
       // Fuerza un tick en estado de alarma.
-      TIMER_START_MS( blink_timer );
+      Timer.start();
       blink_led = true;
-      button = false;
     } else {
       // La distancia medida queda en el medio de la franja de peligro.
       new_distance += (DISTANCE_BAND / 2);
@@ -240,11 +235,13 @@ static uint32_t blink_time = TIME_CFG_BLUE;
 
       Log.msg( F("Nuevos puntos -> seguro = %d, precaucion = %d, peligro = %d"),
               Config.get_safe(), Config.get_warning(), Config.get_danger());
+
+      return true; // Calibracion exitosa.
     }
   } else {
     // Indica el modo de calibracion parpadeando en azul.
-    if( TIMER_IS_EXPIRED_MS( blink_timer, blink_time ) ) {
-        TIMER_START_MS( blink_timer );
+    if( Timer.expired( blink_time ) ) {
+        Timer.start();
 
         blink_led = !blink_led;
         distance_ok = true;
@@ -266,7 +263,7 @@ static uint32_t blink_time = TIME_CFG_BLUE;
     }
   }
 
-  return button;
+  return false;  // Continuar con la calibracion.
 }
 
 // Controla la distancia del usuario con respecto al sensor.
@@ -274,21 +271,21 @@ void control( SAMPLE_INFO& sample )
 {
 uint8_t state;
 static uint8_t  last_state = 0;
-static uint32_t blink_timer = 0;
-static uint32_t buzzer_timer = 0;
+static CTimer   Timer_blink;
+static CTimer   Timer_buzzer;
 static uint32_t buzzer_time = TIME_DANGER_ON;         // Variable para controlar el ton/toff del buzzer.
 
     state = get_state( sample.filtered, last_state );
 
     // Mantiene el estado anterior cuando el actual es menos peligroso que el
     // actual y no expiro el temporizando.
-    if ( (state > last_state) && !TIMER_IS_EXPIRED_MS( blink_timer, 1000 ) ) {
+    if ( (state > last_state) && !Timer_blink.expired( 1000 ) ) {
         state = last_state;
     } else {
         // Cuando el estado anterior es igual al actual,
         // resetea el temporizador de iluminacion.
         if( state == last_state ) {
-            TIMER_START_MS( blink_timer );
+            Timer_blink.start();
         }
     }
 
@@ -296,7 +293,7 @@ static uint32_t buzzer_time = TIME_DANGER_ON;         // Variable para controlar
     if (state != ST_DANGER) {
         Buzzer.off();
         buzzer_time = TIME_DANGER_ON;
-        TIMER_START_MS( buzzer_timer );
+        Timer_buzzer.start();
     }
 
     switch( state ) {
@@ -309,10 +306,10 @@ static uint32_t buzzer_time = TIME_DANGER_ON;         // Variable para controlar
 
             // Si el buzzer esta activado, lo prende y apaga en forma intermitente.
             if ( Config.get_buzzer() ) {
-              if( TIMER_IS_EXPIRED_MS( buzzer_timer, buzzer_time ) ) {
+              if( Timer_buzzer.expired( buzzer_time ) ) {
                   // La pausa es el doble del sonido.
                   buzzer_time = (Buzzer.tgl() ? TIME_DANGER_ON : TIME_DANGER_OFF);
-                  TIMER_START_MS( buzzer_timer );
+                  Timer_buzzer.start();
               }
             }else{
               Buzzer.off();
@@ -397,7 +394,6 @@ static CRGB last_color = CRGB::Black;
 
 // Inicializa los perfericos del cartel.
 void setup() {
-  pinMode(PIN_CFG_BUTTON, INPUT_PULLUP);
   pinMode(LED_BUILTIN, OUTPUT);
 
   FastLED.addLeds<WS2812B, DATA_PIN, GRB>(leds, NUM_LEDS);
@@ -412,7 +408,8 @@ void setup() {
   sensor.setTimeout(500);
 
   Buzzer.init();
-  
+  Button.init();
+
   if ( !sensor.init() ){
     Log.msg( F("Fallo al Inicializar el Sensor VL53L0X") );
     while (1) {
@@ -459,16 +456,14 @@ bool check_bands( void )
 // Loop de control del cartel de distanciamiento.
 void loop()
 {
-bool                  button;
-
-static uint32_t       timer = 0;
-static uint8_t        st_loop = ST_LOOP_INIT;
-static bool           bands_ok = false;
-SAMPLE_INFO           sample;
+static CTimer   Timer;
+static uint8_t  st_loop = ST_LOOP_INIT;
+static bool     bands_ok = false;
+SAMPLE_INFO     sample;
 
     get_filtered_distance( sample );
 
-    button = button_debounced();
+    Button.debounce();
 
     Config.host_cmd();
 
@@ -477,7 +472,7 @@ SAMPLE_INFO           sample;
         // donde espera que el usuario configure la distancia de peligro.
         case ST_LOOP_INIT:
             st_loop = ST_LOOP_TIMER_CFG;
-            TIMER_START_MS( timer );
+            Timer.start();
 
             Log.msg( F("Puntos -> seguro = %d, precaucion = %d, peligro = %d, buzzer = %d, log_ctrl = %d"),
                      Config.get_safe(), Config.get_warning(),
@@ -494,14 +489,14 @@ SAMPLE_INFO           sample;
         case ST_LOOP_TIMER_CFG:
             // Si el operador presiona el pulsador activa la secuencia de configuracion.
             // Si expira el temporizador pasa al estado de control de distancia.
-            if ( button ) {
+            if ( Button.is_pressed() ) {
               set_led( CRGB::Pink );
 
               Log.msg( F("Suelte el pulsador para continuar con la calibracion.") );
 
               st_loop = ST_LOOP_CONFIG;
             // Si las bandas son invalidas se queda en configuracion.
-            } else if( bands_ok && TIMER_IS_EXPIRED_MS( timer, 5000 ) ){
+            } else if( bands_ok && Timer.expired( 5000 ) ){
                 st_loop = ST_INIT_TIMER_CHANGE_BUZZER;
             }
         break;
@@ -509,13 +504,13 @@ SAMPLE_INFO           sample;
         case ST_LOOP_CONFIG:
             // De la rutina de configuracion, sale cuando el usuario presiona el pulsador
             // y el valor que lee del sensor esta dentro del rango permitido.
-            if( calibracion( button, sample.filtered ) ) {
+            if( calibracion( sample.filtered ) ) {
                 st_loop = ST_INIT_TIMER_CHANGE_BUZZER;
             }
         break;
 
         case ST_INIT_TIMER_CHANGE_BUZZER:
-          TIMER_START_MS( timer );
+          Timer.start();
           st_loop = ST_LOOP_RUN;
         break;
 
@@ -524,7 +519,7 @@ SAMPLE_INFO           sample;
         case ST_LOOP_RUN:
             // Si el tiempo expiro, cada vez que se presiona el pulsado, invierte la
             // habilitacion del buzzer.
-            if( TIMER_IS_EXPIRED_MS( timer, 1000 ) && button ){
+            if( Timer.expired( 1000 ) && Button.is_pressed() ){
                 config_buzzer_on_tgl();
                 st_loop = ST_INIT_TIMER_CHANGE_BUZZER;
             }
