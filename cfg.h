@@ -14,6 +14,7 @@
 #define CONFIG_H
 
 #include "Arduino.h"
+#include <ArduinoJson.h>
 
 #define EEPRON_ADDRESS_CONFIG           4       // Direccion en la epprom donde se almacena la configuracion.
 #define MAGIC_NUMBER                    23      // Numero magico para detectar memoria desinicializada.
@@ -81,6 +82,7 @@ class CConfig
     void set_buzzer_toff( uint32_t );
 
     void host_cmd( void );
+  
   private:
     uint8_t log_control;        // 0 = log de informacion de control desactivada.
     bool    buzzer_on;
@@ -97,6 +99,8 @@ class CConfig
 
     uint32_t buzzer_ton;        // Tiempo en mS que emite.
     uint32_t buzzer_toff;       // Tiempo en mS que esta apagado.
+
+    void send_all_params( JsonDocument& doc );
 };
 
 #endif // CONFIG_H

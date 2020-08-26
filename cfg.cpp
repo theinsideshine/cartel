@@ -14,7 +14,6 @@
 #include "log.h"
 
 #include <EEPROM.h>
-#include <ArduinoJson.h>
 
 CConfig::CConfig()
 {
@@ -178,6 +177,7 @@ void CConfig::set_buzzer_toff( uint32_t val )
 }
 
 // Lee por el puerto serie parametros de configuracion en formato json.
+// read:'all'                   envia todos los parametros en formato json.
 // log_control:0=desactivado,1=estandar,2=arduino plotter
 // buzzer:false/true.           activa el buzzer
 // point_danger:0 a 65535       configura el punto de peligro
@@ -249,6 +249,28 @@ void CConfig::host_cmd( void )
                 set_buzzer_toff( doc["buzzer_toff"] );
                 Serial.println( get_buzzer_toff() );
             }
+
+            if ( doc.containsKey("read") ) {
+                send_all_params( doc );
+            }
         }
     }
+}
+
+// Envia todos los parametros de configuracion en formato json.
+void CConfig::send_all_params( JsonDocument& doc )
+{
+    doc["buzzer"] = get_buzzer();
+    doc["point_danger"] =  get_danger();
+    doc["point_warning"] = get_warning();
+    doc["point_safe"] =  get_safe();
+    doc["color_danger"] = get_color_danger();
+    doc["color_safe"] = get_color_safe();
+    doc["color_warning"] = get_color_warning();
+    doc["log_control"] = get_log_control();
+    doc["ewma_alpha"] = get_ewma_alpha();
+    doc["buzzer_ton"] = get_buzzer_ton();
+    doc["buzzer_toff"] = get_buzzer_toff();
+            
+    serializeJsonPretty(doc, Serial);
 }
