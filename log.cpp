@@ -14,13 +14,11 @@
 
 Clog::Clog()
 {
-    type = LOG_DISABLED;
 }
 
-void Clog::init( uint8_t enable )
+void Clog::init( void )
 {
     Serial.begin( LOG_SERIAL_SPEED );
-    type = enable;
 }
 
 // Muestra informacion de logueo por el puerto serie, precedidos
@@ -44,12 +42,11 @@ va_list args;
     Serial.println( buf );
 }
 
-// Lee por el puerto serie por comandos log.
-// Por ahora se acepta uno solo y tiene 3 valores.
-// log:0 = descativa el log.
-// log:1 = activa el log.
-// log:3 = activa el log en formato arduino serial plotter.
-void Clog::process_cmd( void )
+void Clog::ctrl( uint8_t enable, uint16_t raw, uint16_t filtered, uint8_t state, uint16_t danger_point )
 {
-
+    if( enable == LOG_STANDAR )
+    {
+        msg( F("raw = %d distancia = %d estado = %d peligro = %d"),
+             raw, filtered, state, danger_point );
+    }
 }

@@ -25,12 +25,11 @@ class Clog
 {
   public:
     Clog();
-    void init( uint8_t type );
+    void init( void );
     void msg( const __FlashStringHelper *fmt, ... );
-    void process_cmd( void );
+    void ctrl( uint8_t enable, uint16_t raw, uint16_t filtered, uint8_t state, uint16_t danger_point );
 
   private:
-    uint8_t type;       // 0 = log desactivado.
 };
 
 #endif // LOG_H

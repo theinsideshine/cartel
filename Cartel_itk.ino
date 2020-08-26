@@ -303,11 +303,11 @@ static uint32_t buzzer_time = TIME_DANGER_ON;         // Variable para controlar
 
     switch( state ) {
         case ST_WARNING:
-            set_led( CRGB::Yellow );
+            set_led( Config.get_color_warning() );
         break;
 
         case ST_DANGER:
-            set_led( CRGB::Red );
+            set_led( Config.get_color_danger() );
 
             // Si el buzzer esta activado, lo prende y apaga en forma intermitente.
             if ( Config.get_buzzer() ) {
@@ -323,7 +323,7 @@ static uint32_t buzzer_time = TIME_DANGER_ON;         // Variable para controlar
 
         default:
         case ST_SAFE:
-            set_led( CRGB::Green );
+            set_led( Config.get_color_safe() );
         break;
     }
 
@@ -332,8 +332,7 @@ static uint32_t buzzer_time = TIME_DANGER_ON;         // Variable para controlar
     // Para evitar sobrecargar la unidad serie, Logea la informacion
     // de control cada vez que hay una muestra nueva.
     if( sample.result ) {
-        Log.msg( F("raw = %d distancia = %d estado = %d peligro = %d"),
-                 sample.raw, sample.filtered, state, Config.get_danger() );
+        Log.ctrl( Config.get_log_control(), sample.raw, sample.filtered, state, Config.get_danger() );
     }
 }
 
@@ -434,7 +433,7 @@ void setup() {
 
   FastLED.addLeds<WS2812B, DATA_PIN, GRB>(leds, NUM_LEDS);
 
-  Log.init( true );
+  Log.init();
 
   Log.msg( F("Cartel distanciamiento Covid-19 - version 1.0.1") );
   Log.msg( F("Intelektron SA - 2020") );
@@ -500,6 +499,8 @@ SAMPLE_INFO           sample;
 
     button = button_debounced();
 
+    Config.host_cmd();
+
     switch( st_loop ) {
         // Carga los valores de la configuracion y pasa al estado temporizado
         // donde espera que el usuario configure la distancia de peligro.
@@ -507,9 +508,9 @@ SAMPLE_INFO           sample;
             st_loop = ST_LOOP_TIMER_CFG;
             TIMER_START_MS( timer );
 
-            Log.msg( F("Puntos -> seguro = %d, precaucion = %d, peligro = %d, buzzer = %d"),
+            Log.msg( F("Puntos -> seguro = %d, precaucion = %d, peligro = %d, buzzer = %d, log_ctrl = %d"),
                      Config.get_safe(), Config.get_warning(),
-                     Config.get_danger(), Config.get_buzzer() );
+                     Config.get_danger(), Config.get_buzzer(), Config.get_log_control() );
 
             // Si hay un error en muestra el color rosado.
             if( (bands_ok = check_bands()) ) {
