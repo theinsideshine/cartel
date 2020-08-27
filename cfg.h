@@ -16,6 +16,8 @@
 #include "Arduino.h"
 #include <ArduinoJson.h>
 
+#define FIRMWARE_VERSION                "1.0.5"
+
 #define EEPRON_ADDRESS_CONFIG           4       // Direccion en la epprom donde se almacena la configuracion.
 #define MAGIC_NUMBER                    23      // Numero magico para detectar memoria desinicializada.
 
@@ -117,6 +119,7 @@ class CConfig
     uint16_t hysterisis;        // Histerisis para salir de los estados.
 
     void send_all_params( JsonDocument& doc );
+    void send_version( JsonDocument& doc );
 };
 
 #endif // CONFIG_H

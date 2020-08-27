@@ -203,7 +203,7 @@ void CConfig::set_hysterisis( uint16_t val )
 }
 
 // Lee por el puerto serie parametros de configuracion en formato json.
-// read:'all'                   envia todos los parametros en formato json.
+// read:'all' or 'version'      envia todos los parametros en formato json, o la version del firmware.
 // log_level:0=desactivado,1=mensajes,2=info control estandar,3=info control arduino plotter
 // buzzer:false/true.           activa el buzzer
 // point_danger:0 a 65535       configura el punto de peligro
@@ -289,7 +289,13 @@ void CConfig::host_cmd( void )
             }
 
             if ( doc.containsKey("read") ) {
-                send_all_params( doc );
+                String key = doc["read"];
+
+                if( key == "all" ) {
+                    send_all_params( doc );
+                }else if( key == "version" ) {
+                    send_version( doc );
+                }
             }
         }
     }
@@ -315,6 +321,16 @@ void CConfig::send_all_params( JsonDocument& doc )
     doc["buzzer_toff"] = get_buzzer_toff();
     doc["time_state"] = get_time_state();
     doc["hysterisis"] = get_hysterisis();
+
+    serializeJsonPretty(doc, Serial);
+}
+
+// Envia la version del firmware.
+void CConfig::send_version( JsonDocument& doc )
+{
+    doc.clear();
+
+    doc["version"] = FIRMWARE_VERSION;
 
     serializeJsonPretty(doc, Serial);
 }

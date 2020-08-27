@@ -25,16 +25,13 @@
  *
  *      Intelektron SA Argentina.
  */
-#include <FastLED.h>
-
 #include "log.h"
 #include "cfg.h"
 #include "buzzer.h"
 #include "timer.h"
 #include "button.h"
 #include "tof.h"
-
-#define NUM_LEDS                        16      // Cantidad de led
+#include "led.h"
 
 #define ST_UNKNOW                       0       // Estado desconocido.
 #define ST_DANGER                       1       // El usuario esta en peligro.
@@ -53,16 +50,12 @@
 #define TIME_CFG_BLUE                   500     // Tiempo de parpadeo en calibracion cuando el valor es valido.
 #define TIME_CFG_RED                    300     // Tiempo de parpadeo en calibracion cuando el valor es invalido.
 
-// WS2812B -> Pin de Control.
-#define DATA_PIN 8
-// Array de Leds.
-CRGB leds[NUM_LEDS];
-
 Clog    Log;
 CConfig Config;
 CBuzzer Buzzer;
 CButton Button;
 CTof    Tof;
+CLed    Leds;
 
 // La distancia de calibracion, tiene que ser menor al maximo alcance
 // del sensor (2 metros) menos las distancias de las dos franjas.
@@ -118,16 +111,16 @@ uint16_t        distance;
     }
 
     if( !blink_led ){
-      set_led( CRGB::Black );
+      Leds.set( CRGB::Black );
       Buzzer.off();
     // Si la distancia execede el rango permitido muestra el
     }else if( !distance_ok ) {
-      set_led( CRGB::Red );
+      Leds.set( CRGB::Red );
       Buzzer.on();
       blink_time = TIME_CFG_RED;
     } else {
         blink_time = TIME_CFG_BLUE;
-        set_led( CRGB::Blue );
+        Leds.set( CRGB::Blue );
         Log.msg( F(" Presione para configurar el punto de peligro en %d mm"),
                  distance + (DISTANCE_BAND / 2) );
     }
@@ -168,11 +161,11 @@ static uint32_t buzzer_time = Config.get_buzzer_ton();         // Variable para 
 
     switch( state ) {
         case ST_WARNING:
-            set_led( Config.get_color_warning() );
+            Leds.set( Config.get_color_warning() );
         break;
 
         case ST_DANGER:
-            set_led( Config.get_color_danger() );
+            Leds.set( Config.get_color_danger() );
 
             // Si el buzzer esta activado, lo prende y apaga en forma intermitente.
             if ( Config.get_buzzer() ) {
@@ -188,7 +181,7 @@ static uint32_t buzzer_time = Config.get_buzzer_ton();         // Variable para 
 
         default:
         case ST_SAFE:
-            set_led( Config.get_color_safe() );
+            Leds.set( Config.get_color_safe() );
         break;
     }
 
@@ -245,36 +238,19 @@ void config_buzzer_on_tgl( void )
   Log.msg( F("Habilitacion buzzer = %d"), Config.get_buzzer() );
 }
 
-// Actualiza el display de leds inteligentes, cuando el
-// color actual es diferente del anterior.
-void set_led( CRGB new_color )
-{
-static CRGB last_color = CRGB::Black;
-
-  if( last_color != new_color ){
-    for(uint8_t dot = 0; dot < NUM_LEDS; dot++) {
-      leds[dot] = new_color;
-    }
-
-    FastLED.show();
-
-    last_color = new_color;
-  }
-}
-
 // Inicializa los perfericos del cartel.
 void setup()
 {
     pinMode( LED_BUILTIN, OUTPUT );
 
-    FastLED.addLeds<WS2812B, DATA_PIN, GRB>(leds, NUM_LEDS);
+    Leds.init();
 
     Log.init( Config.get_log_level() );
 
     Buzzer.init();
     Button.init();
 
-    Log.msg( F("Cartel distanciamiento Covid-19 - version 1.0.4") );
+    Log.msg( F("Cartel distanciamiento Covid-19 - %s"), FIRMWARE_VERSION );
     Log.msg( F("Intelektron SA - 2020") );
 
     if ( !Tof.init() ){
@@ -282,11 +258,11 @@ void setup()
         while (1) {
             Buzzer.tgl();
 
-            set_led( CRGB::Blue );
+            Leds.set( CRGB::Blue );
             delay(1000);
-            set_led( CRGB::Green );
+            Leds.set( CRGB::Green );
             delay(2000);
-            set_led( CRGB::Red );
+            Leds.set( CRGB::Red );
             delay(500);
         }
     }
@@ -339,9 +315,9 @@ static bool     bands_ok = false;
 
             // Si hay un error en muestra el color rosado.
             if( (bands_ok = check_bands()) ) {
-                set_led( CRGB::Blue );
+                Leds.set( CRGB::Blue );
             }else {
-                set_led( CRGB::Pink );
+                Leds.set( CRGB::Pink );
             }
         break;
 
@@ -349,7 +325,7 @@ static bool     bands_ok = false;
             // Si el operador presiona el pulsador activa la secuencia de configuracion.
             // Si expira el temporizador pasa al estado de control de distancia.
             if ( Button.is_pressed() ) {
-              set_led( CRGB::Pink );
+              Leds.set( CRGB::Pink );
 
               Log.msg( F("Suelte el pulsador para continuar con la calibracion.") );
 
