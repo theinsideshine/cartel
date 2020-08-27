@@ -91,26 +91,6 @@ CButton Button;
 #define HIGH_SPEED
 //#define HIGH_ACCURACY
 
-// Retorna true cuando el operador presiono el pulsador de programacion.
-// Aplica un mecanismo de antirebote.
-static bool button_debounced( void )
-{
-static CTimer Debounce;
-
-  bool val = (digitalRead( PIN_CFG_BUTTON ) == LOW);
-
-  // Despues que se presiona el pulsador debe permanecer 500 mS liberado.
-  if( val ) {
-    if( Debounce.expired( 500 ) ){
-      val = false;
-    }
-
-    Debounce.start();
-  }
-
-  return val;
-}
-
 #if defined( FILTER_CUSTOM )
 // Obtiene una muestra del sensor de distancia y le aplica los filtros correspondientes.
 // La funcion retorna el valor en crudo para propositos de estudio del filtro.
