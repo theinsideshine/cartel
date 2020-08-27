@@ -324,7 +324,7 @@ static uint32_t buzzer_time = Config.get_buzzer_ton();         // Variable para 
     // Para evitar sobrecargar la unidad serie, Logea la informacion
     // de control cada vez que hay una muestra nueva.
     if( sample.result ) {
-        Log.ctrl( Config.get_log_control(), sample.raw, sample.filtered, state, Config.get_danger() );
+        Log.ctrl( sample.raw, sample.filtered, state, Config.get_danger() );
     }
 }
 
@@ -397,15 +397,15 @@ void setup() {
 
   Log.init();
 
-  Log.msg( F("Cartel distanciamiento Covid-19 - version 1.0.1") );
-  Log.msg( F("Intelektron SA - 2020") );
-
   Wire.begin();
   Wire.setClock(400000);
   sensor.setTimeout(500);
 
   Buzzer.init();
   Button.init();
+
+  Log.msg( F("Cartel distanciamiento Covid-19 - version 1.0.2") );
+  Log.msg( F("Intelektron SA - 2020") );
 
   if ( !sensor.init() ){
     Log.msg( F("Fallo al Inicializar el Sensor VL53L0X") );
@@ -462,7 +462,11 @@ SAMPLE_INFO     sample;
 
     Button.debounce();
 
+    // Verifica si el host envio un JSON con parametros a procesar.
     Config.host_cmd();
+
+    // Actualiza el nivel de log para detener en tiempo real el envio de parametros.
+    Log.set_level( Config.get_log_level() );
 
     switch( st_loop ) {
         // Carga los valores de la configuracion y pasa al estado temporizado
@@ -470,10 +474,6 @@ SAMPLE_INFO     sample;
         case ST_LOOP_INIT:
             st_loop = ST_LOOP_TIMER_CFG;
             Timer.start();
-
-            Log.msg( F("Puntos -> seguro = %d, precaucion = %d, peligro = %d, buzzer = %d, log_ctrl = %d"),
-                     Config.get_safe(), Config.get_warning(),
-                     Config.get_danger(), Config.get_buzzer(), Config.get_log_control() );
 
             // Si hay un error en muestra el color rosado.
             if( (bands_ok = check_bands()) ) {

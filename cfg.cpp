@@ -29,7 +29,7 @@ uint8_t magic_number;
         set_warning( DANGER_DEFAULT + DISTANCE_BAND );
         set_danger( DANGER_DEFAULT );
         set_buzzer( BUZZER_DEFAULT );
-        set_log_control( LOG_DISABLED );
+        set_log_level( LOG_DISABLED );
 
         set_color_danger( COLOR_DANGER_DEFAULT );
         set_color_warning( COLOR_WARNING_DEFAULT );
@@ -43,7 +43,7 @@ uint8_t magic_number;
         EEPROM.get( EEPROM_ADDRESS_DANGER, danger );
 
         EEPROM.get( EEPROM_ADDRESS_BUZZER, buzzer_on );
-        EEPROM.get( EEPROM_ADDRESS_LOG_CONTROL, log_control );
+        EEPROM.get( EEPROM_ADDRESS_LOG_LEVEL, log_level );
 
         EEPROM.get( EEPROM_ADDRESS_COLOR_DANGER, color_danger );
         EEPROM.get( EEPROM_ADDRESS_COLOR_WARNING, color_warning );
@@ -132,15 +132,15 @@ void CConfig::set_color_safe( uint32_t color )
     EEPROM.put( EEPROM_ADDRESS_COLOR_SAFE, color_safe );
 }
 
-uint8_t CConfig::get_log_control( void )
+uint8_t CConfig::get_log_level( void )
 {
-    return log_control;
+    return log_level;
 }
 
-void CConfig::set_log_control( uint8_t enable )
+void CConfig::set_log_level( uint8_t enable )
 {
-    log_control = enable;
-    EEPROM.put( EEPROM_ADDRESS_LOG_CONTROL, log_control );
+    log_level = enable;
+    EEPROM.put( EEPROM_ADDRESS_LOG_LEVEL, log_level );
 }
 
 double CConfig::get_ewma_alpha( void )
@@ -178,7 +178,7 @@ void CConfig::set_buzzer_toff( uint32_t val )
 
 // Lee por el puerto serie parametros de configuracion en formato json.
 // read:'all'                   envia todos los parametros en formato json.
-// log_control:0=desactivado,1=estandar,2=arduino plotter
+// log_level:0=desactivado,1=mensajes,2=info control estandar,3=info control arduino plotter
 // buzzer:false/true.           activa el buzzer
 // point_danger:0 a 65535       configura el punto de peligro
 // point_warning:0 a 65535      configura el punto de precaucion.
@@ -230,9 +230,9 @@ void CConfig::host_cmd( void )
                 Serial.println( get_color_warning() );
             }
 
-            if ( doc.containsKey("log_control") ) {
-                set_log_control( doc["log_control"] );
-                Serial.println( get_log_control() );
+            if ( doc.containsKey("log_level") ) {
+                set_log_level( doc["log_level"] );
+                Serial.println( get_log_level() );
             }
 
             if ( doc.containsKey("ewma_alpha") ) {
@@ -258,8 +258,12 @@ void CConfig::host_cmd( void )
 }
 
 // Envia todos los parametros de configuracion en formato json.
+// Mas adelante, se podria usar el parametro del comando rea
+// para leer un parametro en especial.
 void CConfig::send_all_params( JsonDocument& doc )
 {
+    doc.clear();
+
     doc["buzzer"] = get_buzzer();
     doc["point_danger"] =  get_danger();
     doc["point_warning"] = get_warning();
@@ -267,10 +271,10 @@ void CConfig::send_all_params( JsonDocument& doc )
     doc["color_danger"] = get_color_danger();
     doc["color_safe"] = get_color_safe();
     doc["color_warning"] = get_color_warning();
-    doc["log_control"] = get_log_control();
+    doc["log_level"] = get_log_level();
     doc["ewma_alpha"] = get_ewma_alpha();
     doc["buzzer_ton"] = get_buzzer_ton();
     doc["buzzer_toff"] = get_buzzer_toff();
-            
+
     serializeJsonPretty(doc, Serial);
 }
