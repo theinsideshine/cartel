@@ -118,7 +118,7 @@ bool over_range = false;
     filtered = custom_last_valid_val;
 }
 #elif defined( FILTER_EWMA )
-// Obtiene una muestra del sensor de distancia y le aplica los filtros correspondientes.
+// A la lectura en crudo le aplica un filtro exponencial.
 // EWMA Filter - Exponentially Weighted Moving Average filter used for smoothing
 // data series readings.
 void CTof::filter_ewma( double alpha )
@@ -133,8 +133,8 @@ void CTof::filter_ewma( double alpha )
 }
 #endif
 
-// Obtiene una muestra del sensor de distancia y le aplica los filtros correspondientes.
-// La funcion retorna el valor en crudo para propositos de estudio del filtro.
+// Obtiene una muestra del sensor de distancia y le aplica un filtro.
+// Retorna false cuando demora mucho tiempos en obtener la muestra.
 bool CTof::read( double alpha )
 {
 bool ret_val = true;
@@ -147,7 +147,6 @@ bool ret_val = true;
         new_sample = false;
     }
 
-    // La funcion comienza la lectura de un rango en forma no bloqueante.
     if ( new_sample ) {
         // Procesa el valor cuando la distancia se obtuvo sin problemas.
         ret_val = !sensor.timeoutOccurred();

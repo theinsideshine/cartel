@@ -53,8 +53,6 @@
 #define TIME_CFG_BLUE                   500     // Tiempo de parpadeo en calibracion cuando el valor es valido.
 #define TIME_CFG_RED                    300     // Tiempo de parpadeo en calibracion cuando el valor es invalido.
 
-#define ENABLE_HYSTERESIS                       // Habilita la histerisis para salir del estado anterior.
-
 // WS2812B -> Pin de Control.
 #define DATA_PIN 8
 // Array de Leds.
@@ -143,21 +141,21 @@ void control( void )
 {
 uint8_t state;
 static uint8_t  last_state = 0;
-static CTimer   Timer_blink;
+static CTimer   Timer_led;
 static CTimer   Timer_buzzer;
 static uint32_t buzzer_time = Config.get_buzzer_ton();         // Variable para controlar el ton/toff del buzzer.
 
     state = get_state( Tof.get_filtered(), last_state );
 
-    // Mantiene el estado anterior cuando el actual es menos peligroso que el
-    // actual y no expiro el temporizando.
-    if ( (state > last_state) && !Timer_blink.expired( 1000 ) ) {
+    // Mantiene el estado anterior cuando el actual es menos peligroso
+    // y el temporizando de estados no expiro.
+    if ( (state > last_state) && !Timer_led.expired( Config.get_time_state() ) ) {
         state = last_state;
     } else {
         // Cuando el estado anterior es igual al actual,
         // resetea el temporizador de iluminacion.
         if( state == last_state ) {
-            Timer_blink.start();
+            Timer_led.start();
         }
     }
 
@@ -196,7 +194,7 @@ static uint32_t buzzer_time = Config.get_buzzer_ton();         // Variable para 
 
     last_state = state;
 
-    // Para evitar sobrecargar la unidad serie, Logea la informacion
+    // Para evitar sobrecargar la unidad serie, logea la informacion
     // de control cada vez que hay una muestra nueva.
     if( Tof.is_sample() ) {
         Log.ctrl( Tof.get_raw(), Tof.get_filtered(), state, Config.get_danger() );
@@ -206,11 +204,11 @@ static uint32_t buzzer_time = Config.get_buzzer_ton();         // Variable para 
 // Para salir de las franjas mas bajas, aplica una histerisis de media banda.
 bool hysteresis_off( uint16_t val, uint16_t next_point )
 {
-#ifdef ENABLE_HYSTERESIS
-  return ( val < (next_point - (DISTANCE_BAND / 2)) );
-#else
-  return false;
-#endif
+    if( Config.get_hysterisis() > 0 ) {
+        return ( val < (next_point - Config.get_hysterisis()) );
+    }
+
+    return false;
 }
 
 // Obtiene el estado comparando la distancia con las franjas configuradas.
@@ -276,7 +274,7 @@ void setup()
     Buzzer.init();
     Button.init();
 
-    Log.msg( F("Cartel distanciamiento Covid-19 - version 1.0.3") );
+    Log.msg( F("Cartel distanciamiento Covid-19 - version 1.0.4") );
     Log.msg( F("Intelektron SA - 2020") );
 
     if ( !Tof.init() ){

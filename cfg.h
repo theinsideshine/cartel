@@ -29,11 +29,15 @@
 #define COLOR_WARNING_DEFAULT           0x00FFFF00  // Color amarillo por defecto para la zona de precaucion.
 #define COLOR_SAFE_DEFAULT              0x0000FF00  // Color verde por defecto para la zona segura.
 
-#define EWMA_ALPHA                      0.05     // Factor ALFA, tiene que ser mayor que 0 y menor que 1.
+#define EWMA_ALPHA                      0.05    // Factor ALFA, tiene que ser mayor que 0 y menor que 1.
                                                 // A medida que es menor, mejora el filtrado pero demora
                                                 // la salida.
 #define TIME_BUZZER_ON                  200     // Tiempo en mS que activa el buzzer cuando esta en la zona de peligro.
 #define TIME_BUZZER_OFF                 2000    // Tiempo en mS que permanece apagado el buzzer.
+
+#define TIME_STATE_DEFAULT              1000    // Tiempo por defecto que dura la indicacion del estado.
+
+#define HYSTERISIS_DEFAULT              (DISTANCE_BAND/2) // Por defecto la hysterisis esta activada a la mitad de la banda.
 
 // Mapa de direcciones de los campos de configuracion en la EEPROM.
 #define EEPROM_ADDRESS_MAGIC_NUMBER     0
@@ -48,6 +52,8 @@
 #define EEPROM_ADDRESS_EWMA_ALPHA       (EEPROM_ADDRESS_COLOR_SAFE + sizeof(uint32_t))
 #define EEPROM_ADDRESS_BUZZER_TON       (EEPROM_ADDRESS_EWMA_ALPHA + sizeof(uint32_t))
 #define EEPROM_ADDRESS_BUZZER_TOFF      (EEPROM_ADDRESS_BUZZER_TON + sizeof(uint32_t))
+#define EEPROM_ADDRESS_TIME_STATE       (EEPROM_ADDRESS_BUZZER_TOFF + sizeof(uint32_t))
+#define EEPROM_ADDRESS_HYSTERESIS       (EEPROM_ADDRESS_TIME_STATE + sizeof(uint32_t))
 
 class CConfig
 {
@@ -81,6 +87,12 @@ class CConfig
     uint32_t get_buzzer_toff( void );
     void set_buzzer_toff( uint32_t );
 
+    uint32_t get_time_state( void );
+    void set_time_state( uint32_t );
+
+    uint16_t get_hysterisis( void );
+    void set_hysterisis( uint16_t );
+
     void host_cmd( void );
 
   private:
@@ -99,6 +111,10 @@ class CConfig
 
     uint32_t buzzer_ton;        // Tiempo en mS que emite.
     uint32_t buzzer_toff;       // Tiempo en mS que esta apagado.
+
+    uint32_t time_state;        // Tiempo que dura la indicacion del estado en mS.
+
+    uint16_t hysterisis;        // Histerisis para salir de los estados.
 
     void send_all_params( JsonDocument& doc );
 };

@@ -37,6 +37,8 @@ uint8_t magic_number;
         set_ewma_alpha( EWMA_ALPHA );
         set_buzzer_ton( TIME_BUZZER_ON );
         set_buzzer_toff( TIME_BUZZER_OFF );
+        set_time_state( TIME_STATE_DEFAULT );
+        set_hysterisis( HYSTERISIS_DEFAULT );
     }else {
         EEPROM.get( EEPROM_ADDRESS_SAFE, safe );
         EEPROM.get( EEPROM_ADDRESS_WARNING, warning );
@@ -52,6 +54,8 @@ uint8_t magic_number;
         EEPROM.get( EEPROM_ADDRESS_EWMA_ALPHA, ewma_alpha );
         EEPROM.get( EEPROM_ADDRESS_BUZZER_TON, buzzer_ton );
         EEPROM.get( EEPROM_ADDRESS_BUZZER_TOFF, buzzer_toff );
+        EEPROM.get( EEPROM_ADDRESS_TIME_STATE, time_state );
+        EEPROM.get( EEPROM_ADDRESS_HYSTERESIS, hysterisis );
     }
 }
 
@@ -176,6 +180,28 @@ void CConfig::set_buzzer_toff( uint32_t val )
     EEPROM.put( EEPROM_ADDRESS_BUZZER_TOFF, buzzer_toff );
 }
 
+uint32_t CConfig::get_time_state( void )
+{
+    return time_state;
+}
+
+void CConfig::set_time_state( uint32_t val )
+{
+    time_state = val;
+    EEPROM.put( EEPROM_ADDRESS_TIME_STATE, time_state );
+}
+
+uint16_t CConfig::get_hysterisis( void )
+{
+    return hysterisis;
+}
+
+void CConfig::set_hysterisis( uint16_t val )
+{
+    hysterisis = val;
+    EEPROM.put( EEPROM_ADDRESS_HYSTERESIS, hysterisis );
+}
+
 // Lee por el puerto serie parametros de configuracion en formato json.
 // read:'all'                   envia todos los parametros en formato json.
 // log_level:0=desactivado,1=mensajes,2=info control estandar,3=info control arduino plotter
@@ -188,7 +214,9 @@ void CConfig::set_buzzer_toff( uint32_t val )
 // color_safe: 0 a 0xFFFFFFFF   configura el color para seguro.
 // ewma_alpha: 0 a 1            configura la constante alpha del filtro exponencial.
 // buzzer_ton: 0 a 0xFFFFFFFF   configura el tiempo que emite sonido en mS.
-// buzzer_toff: 0 a 0xFFFFFFFF   configura el tiempo que permanece apagado en mS.
+// buzzer_toff: 0 a 0xFFFFFFFF  configura el tiempo que permanece apagado en mS.
+// time_state 0 a 0xFFFFFFFF    configura el tiempo que dura la indicacion de estado.
+// hysterisis 0 a 65535         configura la histerisis para salir del estado (0 desactivado).
 void CConfig::host_cmd( void )
 {
     if ( Serial.available() ){
@@ -250,6 +278,16 @@ void CConfig::host_cmd( void )
                 Serial.println( get_buzzer_toff() );
             }
 
+            if ( doc.containsKey("time_state") ) {
+                set_time_state( doc["time_state"] );
+                Serial.println( get_time_state() );
+            }
+
+            if ( doc.containsKey("hysterisis") ) {
+                set_hysterisis( doc["hysterisis"] );
+                Serial.println( get_hysterisis() );
+            }
+
             if ( doc.containsKey("read") ) {
                 send_all_params( doc );
             }
@@ -275,6 +313,8 @@ void CConfig::send_all_params( JsonDocument& doc )
     doc["ewma_alpha"] = get_ewma_alpha();
     doc["buzzer_ton"] = get_buzzer_ton();
     doc["buzzer_toff"] = get_buzzer_toff();
+    doc["time_state"] = get_time_state();
+    doc["hysterisis"] = get_hysterisis();
 
     serializeJsonPretty(doc, Serial);
 }
