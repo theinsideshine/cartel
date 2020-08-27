@@ -276,7 +276,7 @@ void setup()
     Buzzer.init();
     Button.init();
 
-    Log.msg( F("Cartel distanciamiento Covid-19 - version 1.0.2") );
+    Log.msg( F("Cartel distanciamiento Covid-19 - version 1.0.3") );
     Log.msg( F("Intelektron SA - 2020") );
 
     if ( !Tof.init() ){
