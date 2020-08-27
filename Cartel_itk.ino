@@ -422,9 +422,14 @@ void setup() {
 // Verifica que las bandas sean validas.
 bool check_bands( void )
 {
-    if( (Config.get_danger() > MIN_SENSOR_DISTANCE) && (Config.get_danger() < MAX_SENSOR_DISTANCE) ){
-        return ( ((Config.get_warning() - DISTANCE_BAND) == Config.get_danger()) &&
-                 ((Config.get_safe() - DISTANCE_BAND) == Config.get_warning()) );
+    // Danger tiene que estar dentro de los limites de operacion del sensor
+    // y ser menor que warning, y a su vez warning menor que safe.
+    // y safe menor que el limite superior del sensor.
+    if( Config.get_danger() > MIN_SENSOR_DISTANCE ){
+        if ( (Config.get_danger() < Config.get_warning()) &&
+             (Config.get_warning() < Config.get_safe()) ) {
+                 return ( Config.get_safe() < MAX_SENSOR_DISTANCE );
+             }
     }
 
     return false;
