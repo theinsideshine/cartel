@@ -17,9 +17,10 @@ Clog::Clog()
     level = LOG_DISABLED;
 }
 
-void Clog::init( void )
+void Clog::init( uint8_t level )
 {
     Serial.begin( LOG_SERIAL_SPEED );
+    set_level( level );
 }
 
 void Clog::set_level( uint8_t level )
@@ -69,7 +70,6 @@ va_list args;
     if( send_mills ) {
         Serial.print( millis() );
         Serial.print( " " );
-        Serial.println( buf );
     }
 
     Serial.println( buf );

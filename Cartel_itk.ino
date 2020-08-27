@@ -395,7 +395,7 @@ void setup() {
 
   FastLED.addLeds<WS2812B, DATA_PIN, GRB>(leds, NUM_LEDS);
 
-  Log.init();
+  Log.init( Config.get_log_level() );
 
   Wire.begin();
   Wire.setClock(400000);
