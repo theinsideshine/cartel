@@ -60,7 +60,7 @@ void Clog::msg( const __FlashStringHelper *fmt, ... )
 //       F(), ejemplo: log_msg( F("valor = %d"), var );
 void Clog::msg_ctrl( bool send_mills, const __FlashStringHelper *fmt, ... )
 {
-char buf[ 128 ];
+char buf[ 256 ];
 va_list args;
 
     va_start(args, fmt);
@@ -85,7 +85,7 @@ void Clog::ctrl( uint16_t raw, uint16_t filtered, uint8_t state, uint16_t danger
                   raw, filtered, state, danger_point );
     }else if( level == LOG_CTRL_ARDUINO_PLOTTER ) {
         // Escala el estado para mejorar la visualizacion.
-        uint32_t scale = map( state, 0, 3, 0, 5000 );
+        uint16_t scale = map( state, 0, 3, 0, 5000 );
 
         msg_ctrl( false, F("Min:0, raw:%d, filtered:%d, state:%d, danger:%d, Max:8190"),
                   raw, filtered, scale, danger_point );
