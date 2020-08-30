@@ -225,67 +225,67 @@ void CConfig::host_cmd( void )
         if ( !error ) {
             if ( doc.containsKey("buzzer") ) {
                 set_buzzer( doc["buzzer"] );
-                Serial.println( get_buzzer() );
+                send_ok( doc );
             }
 
             if ( doc.containsKey("point_danger") ) {
                 set_danger( doc["point_danger"] );
-                Serial.println( get_danger() );
+                send_ok( doc );
             }
 
             if ( doc.containsKey("point_warning") ) {
                 set_warning( doc["point_warning"] );
-                Serial.println( get_warning() );
+                send_ok( doc );
             }
 
             if ( doc.containsKey("point_safe") ) {
                 set_safe( doc["point_safe"] );
-                Serial.println( get_safe() );
+                send_ok( doc );
             }
 
             if ( doc.containsKey("color_danger") ) {
                 set_color_danger( doc["color_danger"] );
-                Serial.println( get_color_danger() );
+                send_ok( doc );
             }
 
             if ( doc.containsKey("color_safe") ) {
                 set_color_safe( doc["color_safe"] );
-                Serial.println( get_color_safe() );
+                send_ok( doc );
             }
 
             if ( doc.containsKey("color_warning") ) {
                 set_color_warning( doc["color_warning"] );
-                Serial.println( get_color_warning() );
+                send_ok( doc );
             }
 
             if ( doc.containsKey("log_level") ) {
                 set_log_level( doc["log_level"] );
-                Serial.println( get_log_level() );
+                send_ok( doc );
             }
 
             if ( doc.containsKey("ewma_alpha") ) {
                 set_ewma_alpha( doc["ewma_alpha"] );
-                Serial.println( get_ewma_alpha() );
+                send_ok( doc );
             }
 
             if ( doc.containsKey("buzzer_ton") ) {
                 set_buzzer_ton( doc["buzzer_ton"] );
-                Serial.println( get_buzzer_ton() );
+                send_ok( doc );
             }
 
             if ( doc.containsKey("buzzer_toff") ) {
                 set_buzzer_toff( doc["buzzer_toff"] );
-                Serial.println( get_buzzer_toff() );
+                send_ok( doc );
             }
 
             if ( doc.containsKey("time_state") ) {
                 set_time_state( doc["time_state"] );
-                Serial.println( get_time_state() );
+                send_ok( doc );
             }
 
             if ( doc.containsKey("hysterisis") ) {
                 set_hysterisis( doc["hysterisis"] );
-                Serial.println( get_hysterisis() );
+                send_ok( doc );
             }
 
             if ( doc.containsKey("read") ) {
@@ -322,7 +322,7 @@ void CConfig::send_all_params( JsonDocument& doc )
     doc["time_state"] = get_time_state();
     doc["hysterisis"] = get_hysterisis();
 
-    serializeJsonPretty(doc, Serial);
+    serializeJsonPretty( doc, Serial );
 }
 
 // Envia la version del firmware.
@@ -332,5 +332,13 @@ void CConfig::send_version( JsonDocument& doc )
 
     doc["version"] = FIRMWARE_VERSION;
 
-    serializeJsonPretty(doc, Serial);
+    serializeJsonPretty( doc, Serial );
+}
+
+// Envia el resultado en formato json
+void CConfig::send_ok( JsonDocument& doc )
+{
+    doc[ "result" ] = "ok";
+
+    serializeJsonPretty( doc, Serial );
 }
