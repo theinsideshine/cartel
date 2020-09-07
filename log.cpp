@@ -76,7 +76,7 @@ va_list args;
 void Clog::ctrl( uint16_t raw, uint16_t filtered, uint8_t state, uint16_t danger_point )
 {
     if( level == LOG_CTRL_JSON ){
-      msg_ctrl( F("{\"time\" = %lu, \"raw\" = %d, \"filtered\" = %d, \"state\" = %d}"),
+      msg_ctrl( F("{\"time\":%lu, \"raw\":%d, \"filtered\":%d, \"state\":%d}"),
                  millis() , raw, filtered, state, danger_point );
     }else if( level == LOG_CTRL_ARDUINO_PLOTTER ) {
         // Escala el estado para mejorar la visualizacion.
