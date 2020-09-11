@@ -16,7 +16,7 @@
 #include "Arduino.h"
 #include <ArduinoJson.h>
 
-#define FIRMWARE_VERSION                "1.0.7"
+#define FIRMWARE_VERSION                "1.0.8"
 
 #define EEPRON_ADDRESS_CONFIG           4       // Direccion en la epprom donde se almacena la configuracion.
 #define MAGIC_NUMBER                    23      // Numero magico para detectar memoria desinicializada.

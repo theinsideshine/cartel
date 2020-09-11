@@ -288,10 +288,10 @@ void CConfig::host_cmd( void )
                 send_ok( doc );
             }
 
-            if ( doc.containsKey("read") ) {
-                String key = doc["read"];
+            if ( doc.containsKey("info") ) {
+                String key = doc["info"];
 
-                if( key == "all" ) {
+                if( key == "all-params" ) {
                     send_all_params( doc );
                 }else if( key == "version" ) {
                     send_version( doc );
@@ -306,7 +306,7 @@ void CConfig::host_cmd( void )
 // para leer un parametro en especial.
 void CConfig::send_all_params( JsonDocument& doc )
 {
-    doc.clear();
+    //doc.clear();
 
     doc["buzzer"] = get_buzzer();
     doc["point_danger"] =  get_danger();
@@ -328,7 +328,7 @@ void CConfig::send_all_params( JsonDocument& doc )
 // Envia la version del firmware.
 void CConfig::send_version( JsonDocument& doc )
 {
-    doc.clear();
+    //doc.clear();
 
     doc["version"] = FIRMWARE_VERSION;
 
