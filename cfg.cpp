@@ -219,73 +219,75 @@ void CConfig::set_hysterisis( uint16_t val )
 // hysterisis 0 a 65535         configura la histerisis para salir del estado (0 desactivado).
 void CConfig::host_cmd( void )
 {
+bool known_key = false;
+
     if ( Serial.available() ){
-        StaticJsonDocument<256> doc;
+        StaticJsonDocument<512> doc;
         auto error = deserializeJson( doc, Serial );
         if ( !error ) {
             if ( doc.containsKey("buzzer") ) {
                 set_buzzer( doc["buzzer"] );
-                send_ok( doc );
+                known_key = true;
             }
 
             if ( doc.containsKey("point_danger") ) {
                 set_danger( doc["point_danger"] );
-                send_ok( doc );
+                known_key = true;
             }
 
             if ( doc.containsKey("point_warning") ) {
                 set_warning( doc["point_warning"] );
-                send_ok( doc );
+                known_key = true;
             }
 
             if ( doc.containsKey("point_safe") ) {
                 set_safe( doc["point_safe"] );
-                send_ok( doc );
+                known_key = true;
             }
 
             if ( doc.containsKey("color_danger") ) {
                 set_color_danger( doc["color_danger"] );
-                send_ok( doc );
+                known_key = true;
             }
 
             if ( doc.containsKey("color_safe") ) {
                 set_color_safe( doc["color_safe"] );
-                send_ok( doc );
+                known_key = true;
             }
 
             if ( doc.containsKey("color_warning") ) {
                 set_color_warning( doc["color_warning"] );
-                send_ok( doc );
+                known_key = true;
             }
 
             if ( doc.containsKey("log_level") ) {
                 set_log_level( doc["log_level"] );
-                send_ok( doc );
+                known_key = true;
             }
 
             if ( doc.containsKey("ewma_alpha") ) {
                 set_ewma_alpha( doc["ewma_alpha"] );
-                send_ok( doc );
+                known_key = true;
             }
 
             if ( doc.containsKey("buzzer_ton") ) {
                 set_buzzer_ton( doc["buzzer_ton"] );
-                send_ok( doc );
+                known_key = true;
             }
 
             if ( doc.containsKey("buzzer_toff") ) {
                 set_buzzer_toff( doc["buzzer_toff"] );
-                send_ok( doc );
+                known_key = true;
             }
 
             if ( doc.containsKey("time_state") ) {
                 set_time_state( doc["time_state"] );
-                send_ok( doc );
+                known_key = true;
             }
 
             if ( doc.containsKey("hysterisis") ) {
                 set_hysterisis( doc["hysterisis"] );
-                send_ok( doc );
+                known_key = true;
             }
 
             if ( doc.containsKey("info") ) {
@@ -296,6 +298,8 @@ void CConfig::host_cmd( void )
                 }else if( key == "version" ) {
                     send_version( doc );
                 }
+            } else if( known_key == true ) {
+                send_ok( doc );
             }
         }
     }
@@ -306,8 +310,6 @@ void CConfig::host_cmd( void )
 // para leer un parametro en especial.
 void CConfig::send_all_params( JsonDocument& doc )
 {
-    //doc.clear();
-
     doc["buzzer"] = get_buzzer();
     doc["point_danger"] =  get_danger();
     doc["point_warning"] = get_warning();
@@ -328,8 +330,6 @@ void CConfig::send_all_params( JsonDocument& doc )
 // Envia la version del firmware.
 void CConfig::send_version( JsonDocument& doc )
 {
-    //doc.clear();
-
     doc["version"] = FIRMWARE_VERSION;
 
     serializeJsonPretty( doc, Serial );
