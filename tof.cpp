@@ -43,13 +43,23 @@ CTof::CTof()
 
 bool CTof::init( void )
 {
+bool result;
+
     Wire.begin();
     Wire.setClock(400000);
     sensor.setTimeout(500);
 
-    bool result = sensor.init();
+    // Intenta inicializar el sensor, si no puede espera 100 mS
+    // y reintenta hasta que el contador llega a cero.
+    for ( uint8_t x = 0; x < 10; x++ ) {
+        if( (result = sensor.init()) ) {
+            break;
+        }
 
-    if( result ) {
+        delay( 100 );
+    }
+
+    if ( result ) {
 #if defined LONG_RANGE
         // lower the return signal rate limit (default is 0.25 MCPS)
         sensor.setSignalRateLimit(0.1);
