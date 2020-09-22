@@ -15,6 +15,8 @@
 
 #include "Arduino.h"
 
+#define XSHUT_PIN                       17      // Pin de control de modo bajo consumo.
+
 #define SAMPLES_BUFFER_SIZE             4       // Tamaño del buffer de muestras de distancia.
 #define FILTER_EWMA                             // Selecciona el tipo de filtro que se va a usar para
                                                 // posprocesar la distancia del sensor.

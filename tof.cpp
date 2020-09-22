@@ -45,6 +45,18 @@ bool CTof::init( void )
 {
 bool result;
 
+    // Precaucion
+    // El pin Shutdown del VL53L0X es activo bajo y no tolera 5V. Se puede quemar.
+    pinMode( XSHUT_PIN, OUTPUT );
+
+    delay( 5 );
+
+    pinMode( XSHUT_PIN, INPUT );
+
+    //For power-up procedure t-boot max 1.2ms "Datasheet: 2.9 Power sequence"
+    delay( 10 );
+
+
     Wire.begin();
     Wire.setClock(400000);
     sensor.setTimeout(500);
