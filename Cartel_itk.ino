@@ -25,6 +25,8 @@
  *
  *      Intelektron SA Argentina.
  */
+#include <avr/wdt.h>
+
 #include "log.h"
 #include "cfg.h"
 #include "buzzer.h"
@@ -253,6 +255,10 @@ void setup()
     Log.msg( F("Cartel distanciamiento Covid-19 - %s"), FIRMWARE_VERSION );
     Log.msg( F("Intelektron SA - 2020") );
 
+    // Activamos antes de la inicializacion del TOF, para que si falla, genere un
+    // powerup del micro.
+    wdt_enable( WDTO_4S );
+
     if ( !Tof.init() ){
         Log.msg( F("Fallo al Inicializar el Sensor VL53L0X") );
         while (1) {
@@ -292,6 +298,11 @@ void loop()
 static CTimer   Timer;
 static uint8_t  st_loop = ST_LOOP_INIT;
 static bool     bands_ok = false;
+
+    // TODO: experimentar si es suficiente para sacar la placa del estado de cuelgue
+    //       cuando la fuente principal tiene poco filtro, usando el reset del wdt en
+    //       el loop principal, o tiene que ser mas condicional. 
+    wdt_reset();
 
     // Toma una muestra del sensor de distancia.
     if( !Tof.read( Config.get_ewma_alpha() ) ) {
@@ -352,7 +363,7 @@ static bool     bands_ok = false;
         default:
           st_loop = ST_LOOP_RUN;
         case ST_LOOP_RUN:
-            // Si el tiempo expiro, cada vez que se presiona el pulsado, invierte la
+            // Si el tiempo expiro, cada vez que se presiona el pulsador, invierte la
             // habilitacion del buzzer.
             if( Timer.expired( 1000 ) && Button.is_pressed() ){
                 config_buzzer_on_tgl();
