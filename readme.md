@@ -94,11 +94,14 @@ Este proyecto está bajo una licencia MIT.
 Este proyecto está bajo una licencia MIT.
 
 
-
-
 Arquitectura no bloqueante para el embebido en un proyecto real - C++ Parte1
 Se evaluan los ventajas y desventajas de la arquitectura en un proyecto real
 [![Introduccion al proyecto.](images/C5.png)](https://youtu.be/cBQaSfbyPL8)
+
+
+Arquitectura no bloqueante para el embebido en un proyecto real - C++ Parte2
+Se evaluan los ventajas y desventajas de la arquitectura en un proyecto real
+[![Maquina de estados y manejo del TOF.](images/gabinete.png)](https://youtu.be/3DEozmStTic)
 
 Repositorio
 https://github.com/jjsch-dev/vl53l0x-arduino 
