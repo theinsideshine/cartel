@@ -95,13 +95,36 @@ Este proyecto está bajo una licencia MIT.
 
 
 Arquitectura no bloqueante para el embebido en un proyecto real - C++ Parte1
-Se evaluan los ventajas y desventajas de la arquitectura en un proyecto real
+Se evaluan las ventajas y desventajas de la arquitectura en un proyecto real
+Introduccion al proyecto.
 [![Introduccion al proyecto.](images/C5.png)](https://youtu.be/cBQaSfbyPL8)
 
 
 Arquitectura no bloqueante para el embebido en un proyecto real - C++ Parte2
-Se evaluan los ventajas y desventajas de la arquitectura en un proyecto real
+Se evaluan las ventajas y desventajas de la arquitectura en un proyecto real
+Maquina de estados y manejo del TOF.
 [![Maquina de estados y manejo del TOF.](images/gabinete.png)](https://youtu.be/3DEozmStTic)
+
+
+Presentacion
+[Parte1-2](doc/cartel-intro.pdf)
+
+
+Arquitectura no bloqueante para el embebido en un proyecto real - C++ Parte3
+Se evaluan las ventajas y desventajas de la arquitectura en un proyecto real
+Medicion de tiempos de ejecucion
+[![Medicion de tiempos de ejecucion](images/time1.png)](https://youtu.be/_mmqpdAJMuo)
+
+
+
+Arquitectura no bloqueante para el embebido en un proyecto real - C++ Parte4
+Se evaluan las ventajas y desventajas de la arquitectura en un proyecto real
+Conclusion
+[![Conclusion](images/conclusion.png)](https://youtu.be/j3gyFSyE5ps)
+
+
+Presentacion
+[Parte3-4](doc/cartel-tiempo.pdf)
 
 Repositorio
 https://github.com/jjsch-dev/vl53l0x-arduino 
