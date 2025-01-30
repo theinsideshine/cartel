@@ -15,15 +15,11 @@
  *         Para que la indicacion de peligro desaparezca, el usuario
  *         tiene que salir de la zona por mas de 1 segundo.
  *
- * - Compiler:           Arduino 1.8.13
- * - Supported devices:  Nano
+ * - Compiler:           Arduino 2.3.4  
+ * - Supported devices:  Nano/Mega2560
  *
- * \author               MM: mmartinez@intelektron.com
- *                       JS: jschiavoni@intelektron.com
- *
- * Date:  22-08-2020
- *
- *      Intelektron SA Argentina.
+ * \author               JS: juanschiavoni@gmail.com                        
+ * 
  */
 #include <avr/wdt.h>
 
@@ -299,6 +295,14 @@ static CTimer   Timer;
 static uint8_t  st_loop = ST_LOOP_INIT;
 static bool     bands_ok = false;
 
+
+    static unsigned long tiempo_inicio = 0; // Almacena el tiempo de inicio del loop.
+    static unsigned long tiempo_fin = 0;    // Almacena el tiempo de finalización del loop.
+     static unsigned long acumulador_tiempos = 0; // Acumulador para las muestras.
+    static uint16_t contador_muestras = 0;   // Contador de muestras.
+
+    tiempo_inicio = micros(); // Marca el tiempo al inicio del loop.
+
     // TODO: experimentar si es suficiente para sacar la placa del estado de cuelgue
     //       cuando la fuente principal tiene poco filtro, usando el reset del wdt en
     //       el loop principal, o tiene que ser mas condicional. 
@@ -324,7 +328,7 @@ static bool     bands_ok = false;
             st_loop = ST_LOOP_TIMER_CFG;
             Timer.start();
 
-            // Si hay un error en muestra el color rosado.
+            // Si hay un error en la configuracion de las bandas  muestra el color rosado.
             if( (bands_ok = check_bands()) ) {
                 Leds.set( CRGB::Blue );
             }else {
@@ -371,5 +375,28 @@ static bool     bands_ok = false;
             }
 
             control();
-    }
+      }
+/*
+       tiempo_fin = micros(); // Marca el tiempo al final del loop.
+
+    // Calcula la duración del loop en microsegundos.
+    unsigned long duracion_loop = tiempo_fin - tiempo_inicio;
+
+    // Acumula el tiempo y cuenta la muestra.
+    acumulador_tiempos += duracion_loop;
+    contador_muestras++;
+
+    // Si se han tomado 100 muestras, calcula y muestra el promedio.
+    if (contador_muestras == 100) {
+        unsigned long promedio = acumulador_tiempos / 100;
+        Serial.print("Promedio de tiempo del loop: ");
+        Serial.print(promedio);
+        Serial.println(" us");
+
+        // Reinicia el acumulador y el contador.
+        acumulador_tiempos = 0;
+        contador_muestras = 0;
+    }*/
 }
+
+

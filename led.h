@@ -1,14 +1,10 @@
 /**
  * File:   Clase que controla los leds que indican los estados.
  *
- * - Compiler:           Arduino 1.8.13
- * - Supported devices:  Nano
+ * - Compiler:           Arduino 2.3.4  
+ * - Supported devices:  Nano/Mega2560
  *
- * \author               JS: jschiavoni@intelektron.com
- *
- * Date:  27-08-2020
- *
- *      Intelektron SA Argentina.
+ * \author               JS: juanschiavoni@gmail.com 
  */
 #ifndef LEDS_H
 #define LEDS_H
@@ -16,7 +12,7 @@
 #include "Arduino.h"
 #include <FastLED.h>
 
-#define NUM_LEDS                        16      // Cantidad de led
+#define NUM_LEDS                        8      // Cantidad de led
 #define PIN_WS2812B_CTRL                8       // Pin de control de los leds inteligentes.
 
 class CLed

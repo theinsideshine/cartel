@@ -1,14 +1,10 @@
 /**
  * File:   Clase que controla los leds que indican los estados.
  *
- * - Compiler:           Arduino 1.8.13
- * - Supported devices:  Nano
+ * - Compiler:           Arduino 2.3.4  
+ * - Supported devices:  Nano/Mega2560
  *
- * \author               JS: jschiavoni@intelektron.com
- *
- * Date:  27-08-2020
- *
- *      Intelektron SA Argentina.
+ * \author               JS: juanschiavoni@gmail.com 
  */
 #include "led.h"
 

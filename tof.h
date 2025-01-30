@@ -1,14 +1,10 @@
 /**
  * File:   Encapsula el control del sensor de distancia con tecnologia TOF.
  *
- * - Compiler:           Arduino 1.8.13
- * - Supported devices:  Nano
+ * - Compiler:           Arduino 2.3.4  
+ * - Supported devices:  Nano/Mega2560
  *
- * \author               JS: jschiavoni@intelektron.com
- *
- * Date:  27-08-2020
- *
- *      Intelektron SA Argentina.
+ * \author               JS: juanschiavoni@gmail.com 
  */
 #ifndef TOF_H
 #define TOF_H
@@ -20,6 +16,8 @@
 #define SAMPLES_BUFFER_SIZE             4       // Tamaño del buffer de muestras de distancia.
 #define FILTER_EWMA                             // Selecciona el tipo de filtro que se va a usar para
                                                 // posprocesar la distancia del sensor.
+
+                                                        
 class CTof
 {
   public:
@@ -34,6 +32,7 @@ class CTof
       bool new_sample;                  // TRUE nueva muestra.
       uint16_t raw;                     // Distancia en mm en crudo.
       uint16_t filtered;                // Distancia en mm filtrada.
+     
 
 #if defined( FILTER_CUSTOM )
       uint8_t    custom_index = 0;
@@ -46,6 +45,9 @@ class CTof
 
       void filter_ewma( double alpha );
 #endif
-};
+  } ; 
+
 
 #endif // TOF_H
+
+ 

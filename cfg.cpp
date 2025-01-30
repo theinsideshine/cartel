@@ -1,14 +1,10 @@
 /**
  * File:   Clase para controlar la confirguracion en la EEPROM.
  *
- * - Compiler:           Arduino 1.8.13
- * - Supported devices:  Nano
+ * - Compiler:           Arduino 2.3.4  
+ * - Supported devices:  Nano/Mega2560
  *
- * \author               JS: jschiavoni@intelektron.com
- *
- * Date:  25-08-2020
- *
- *      Intelektron SA Argentina.
+ * \author               JS: juanschiavoni@gmail.com 
  */
 #include "cfg.h"
 #include "log.h"
@@ -201,6 +197,24 @@ void CConfig::set_hysterisis( uint16_t val )
     hysterisis = val;
     EEPROM.put( EEPROM_ADDRESS_HYSTERESIS, hysterisis );
 }
+// Lee por el puerto serie parametros de configuracion en formato json.
+// {info:'all-params'}
+// {info:'version'}     envia todos los parametros en formato json, o la version del firmware.
+// log_level:0=desactivado,1=mensajes,2=info control estandar,3=info control arduino plotter
+// {log_level:'1'}
+
+// {"buzzer": false}            buzzer:false/true. activa el buzzer MANDAR SIN COMILLAS EN EL BOOL
+// point_danger:0 a 65535       configura el punto de peligro
+// point_warning:0 a 65535      configura el punto de precaucion.
+// point_safe:0 a 65535         configura el punto de seguridad.
+// color_danger:0 a 0xFFFFFFFF  configura el color para peligro.
+// color_warning:0 a 0xFFFFFFF  configura el color para precaucion.
+// color_safe: 0 a 0xFFFFFFFF   configura el color para seguro.
+// ewma_alpha: 0 a 1            configura la constante alpha del filtro exponencial.
+// buzzer_ton: 0 a 0xFFFFFFFF   configura el tiempo que emite sonido en mS.
+// buzzer_toff: 0 a 0xFFFFFFFF  configura el tiempo que permanece apagado en mS.
+// time_state 0 a 0xFFFFFFFF    configura el tiempo que dura la indicacion de estado.
+// hysterisis 0 a 65535         configura la histerisis para salir del estado (0 desactivado).
 
 // Lee por el puerto serie parametros de configuracion en formato json.
 // read:'all' or 'version'      envia todos los parametros en formato json, o la version del firmware.

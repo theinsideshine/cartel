@@ -1,20 +1,20 @@
 /**
  * File:   Encapsula el control del sensor de distancia con tecnologia TOF.
  *
- * - Compiler:           Arduino 1.8.13
- * - Supported devices:  Nano
+ * - Compiler:           Arduino 2.3.4  
+ * - Supported devices:  Nano/Mega2560
  *
- * \author               JS: jschiavoni@intelektron.com
- *
- * Date:  27-08-2020
- *
- *      Intelektron SA Argentina.
+ * \author               JS: juanschiavoni@gmail.com 
  */
 #include "tof.h"
 #include <VL53L0X.h>
 #include <Wire.h>
 
 VL53L0X sensor;
+
+ bool primer_tiempo = true; // Indica si es la primera vez que se mide
+unsigned long tiempo_anterior = 0; // Guarda el tiempo de la última muestra válida
+
 
 #define LONG_RANGE
 
@@ -125,7 +125,7 @@ bool over_range = false;
     // Para validar la muestra, los valores almacenados
     // en el buffer no tienen que estar separados mas que 20 cm.
     for (uint8_t x=0; x<SAMPLES_BUFFER_SIZE; x++) {
-      over_range = (abs(custom_buff[ x ] - val) > 200);
+      over_range = (abs(custom_buff[ x ] - custom_last_valid_val) > 200);
 
       if (over_range) {
         break;
@@ -160,7 +160,9 @@ void CTof::filter_ewma( double alpha )
 bool CTof::read( double alpha )
 {
 bool ret_val = true;
+unsigned long tiempo_actual = 0; // Tiempo actual calculado con millis()
 
+     
     // La funcion comienza la lectura de un rango en forma no bloqueante.
     new_sample = sensor.readRangeNoBlocking( raw );
 
@@ -169,17 +171,42 @@ bool ret_val = true;
         new_sample = false;
     }
 
-    if ( new_sample ) {
-        // Procesa el valor cuando la distancia se obtuvo sin problemas.
+    if ( new_sample ) {       
+        
         ret_val = !sensor.timeoutOccurred();
         if ( ret_val ) {
+         
 #if defined( FILTER_CUSTOM )
             filter_custom();
 #elif defined( FILTER_EWMA )
             filter_ewma( alpha );
 #endif
+
+          /*
+          // Obtiene el tiempo actual
+            tiempo_actual = millis();
+
+            if (primer_tiempo) {
+                // Si es la primera vez, guarda el tiempo actual
+                tiempo_anterior = tiempo_actual;
+                primer_tiempo = false;
+            } else {
+                // Si no es la primera vez, calcula la diferencia de tiempo
+                unsigned long diferencia_tiempo = tiempo_actual - tiempo_anterior;
+                tiempo_anterior = tiempo_actual; // Actualiza el tiempo anterior
+
+                // Imprime la diferencia de tiempo
+                Serial.print("Diferencia de tiempo entre muestras válidas: ");
+                Serial.print(diferencia_tiempo);
+                Serial.println(" ms");
+            }
+            */
+
         }
     }
-
+    
+    
     return ret_val;
 }
+
+
