@@ -249,7 +249,7 @@ void setup()
     Button.init();
 
     Log.msg( F("Cartel distanciamiento Covid-19 - %s"), FIRMWARE_VERSION );
-    Log.msg( F("Intelektron SA - 2020") );
+    
 
     // Activamos antes de la inicializacion del TOF, para que si falla, genere un
     // powerup del micro.
